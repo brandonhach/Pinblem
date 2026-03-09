@@ -1,0 +1,229 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Inter:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Premium Marketplace Design System - Blue + Green */
+@layer base {
+  :root {
+    /* Core palette */
+    --warm-white: 40 20% 97%;
+    --warm-white-dark: 40 15% 94%;
+    --slate-900: 220 13% 18%;
+    --slate-700: 220 10% 35%;
+    --slate-500: 220 8% 50%;
+    --slate-300: 220 10% 75%;
+    --slate-100: 220 15% 92%;
+
+    /* Blue primary spectrum */
+    --blue-50: 210 100% 97%;
+    --blue-100: 210 95% 92%;
+    --blue-200: 210 90% 82%;
+    --blue-300: 210 85% 70%;
+    --blue-400: 210 85% 56%;
+    --blue-500: 210 90% 45%;
+    --blue-600: 210 95% 36%;
+    --blue-700: 211 100% 28%;
+
+    /* Green accent spectrum */
+    --green-50: 148 55% 96%;
+    --green-100: 148 50% 90%;
+    --green-200: 148 45% 80%;
+    --green-300: 148 45% 66%;
+    --green-400: 148 55% 50%;
+    --green-500: 148 60% 40%;
+    --green-600: 148 65% 32%;
+    --green-700: 148 70% 25%;
+
+    /* Success/Warning/Error */
+    --success: 152 55% 45%;
+    --success-light: 152 50% 92%;
+    --warning: 38 92% 50%;
+    --warning-light: 38 90% 92%;
+    --error: 0 72% 51%;
+    --error-light: 0 70% 95%;
+
+    /* Semantic tokens */
+    --background: var(--warm-white);
+    --foreground: var(--slate-900);
+
+    --card: 0 0% 100%;
+    --card-foreground: var(--slate-900);
+
+    --popover: 0 0% 100%;
+    --popover-foreground: var(--slate-900);
+
+    --primary: var(--blue-500);
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: var(--slate-100);
+    --secondary-foreground: var(--slate-700);
+
+    --muted: var(--warm-white-dark);
+    --muted-foreground: var(--slate-500);
+
+    --accent: var(--green-50);
+    --accent-foreground: var(--green-700);
+
+    --destructive: var(--error);
+    --destructive-foreground: 0 0% 100%;
+
+    --border: var(--slate-100);
+    --input: var(--slate-100);
+    --ring: var(--blue-400);
+
+    --radius: 0.75rem;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.07), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+    --shadow-card: 0 2px 8px -2px rgb(0 0 0 / 0.08), 0 4px 16px -4px rgb(0 0 0 / 0.04);
+    --shadow-card-hover: 0 8px 24px -4px rgb(0 0 0 / 0.12), 0 4px 8px -2px rgb(0 0 0 / 0.06);
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: var(--slate-700);
+    --sidebar-primary: var(--blue-500);
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: var(--green-50);
+    --sidebar-accent-foreground: var(--green-700);
+    --sidebar-border: var(--slate-100);
+    --sidebar-ring: var(--blue-400);
+  }
+
+  .dark {
+    --background: var(--slate-900);
+    --foreground: var(--warm-white);
+
+    --card: 220 13% 22%;
+    --card-foreground: var(--warm-white);
+
+    --popover: 220 13% 22%;
+    --popover-foreground: var(--warm-white);
+
+    --primary: var(--blue-400);
+    --primary-foreground: var(--slate-900);
+
+    --secondary: 220 13% 28%;
+    --secondary-foreground: var(--warm-white);
+
+    --muted: 220 13% 25%;
+    --muted-foreground: var(--slate-300);
+
+    --accent: 148 45% 18%;
+    --accent-foreground: var(--green-200);
+
+    --border: 220 13% 28%;
+    --input: 220 13% 28%;
+    --ring: var(--blue-400);
+
+    --sidebar-background: 220 13% 15%;
+    --sidebar-foreground: var(--slate-300);
+    --sidebar-primary: var(--blue-400);
+    --sidebar-primary-foreground: var(--slate-900);
+    --sidebar-accent: 148 45% 16%;
+    --sidebar-accent-foreground: var(--green-200);
+    --sidebar-border: 220 13% 25%;
+    --sidebar-ring: var(--blue-400);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'DM Sans', sans-serif;
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  /* Tactile card effect */
+  .card-tactile {
+    @apply bg-card rounded-xl border border-border;
+    box-shadow: var(--shadow-card);
+    transition: all 0.2s ease;
+  }
+  
+  .card-tactile:hover {
+    box-shadow: var(--shadow-card-hover);
+    transform: translateY(-2px);
+  }
+
+  /* Glass effect for overlays */
+  .glass {
+    @apply bg-card/80 backdrop-blur-md border border-border/50;
+  }
+
+  /* Drawer animation */
+  .drawer-slide-in {
+    animation: slideInRight 0.3s ease-out;
+  }
+}
+
+@layer utilities {
+  /* Custom shadows */
+  .shadow-tactile {
+    box-shadow: var(--shadow-card);
+  }
+  
+  .shadow-tactile-hover {
+    box-shadow: var(--shadow-card-hover);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
