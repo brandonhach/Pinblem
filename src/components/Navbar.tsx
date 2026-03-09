@@ -52,7 +52,7 @@ const Navbar = () => {
 							📌
 						</span>
 					</div>
-					<span className='font-display font-bold text-xl text-foreground hidden sm:block'>
+					<span className='font-display font-bold text-xl text-foreground sm:block'>
 						Pinblem
 					</span>
 				</Link>
