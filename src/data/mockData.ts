@@ -100,7 +100,7 @@ export const mockPins: Pin[] = [
 		title: 'Haunted Mansion Ghost Pin Set',
 		price: 65,
 		image:
-			'https://i.ebayimg.com/images/g/ebkAAOSwrS1jVq5i/s-l1200.jpg&fit=crop',
+			'https://d23.com/app/uploads/2023/07/Haunted-Mansion-Pin-ShopDisney-backer.jpg?w=400&h=400&fit=crop',
 		location: 'Anaheim, CA',
 		seller: 'HauntedCollector',
 		sellerId: 3,
