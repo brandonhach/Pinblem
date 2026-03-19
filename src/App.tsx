@@ -16,35 +16,108 @@ import Settings from "./pages/Settings";
 import Messages from "./pages/Messages";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
+import ProtectedRoute from "./components/ProtectedRoute";
+import AuthCallback from "./pages/AuthCallback";
 
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/search" element={<Search />} />
-            <Route path="/profile/:id" element={<Profile />} />
-            <Route path="/pin/:id" element={<PinDetail />} />
-            <Route path="/create" element={<CreateListing />} />
-            <Route path="/inbox" element={<Inbox />} />
-            <Route path="/my-listings" element={<MyListings />} />
-            <Route path="/saved" element={<SavedItems />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/messages" element={<Messages />} />
-            <Route path="/login" element={<Login />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+	<QueryClientProvider client={queryClient}>
+		<TooltipProvider>
+			<Toaster />
+			<Sonner />
+			<BrowserRouter>
+				<AuthProvider>
+					<Routes>
+						<Route
+							path='/auth/callback'
+							element={<AuthCallback />}
+						/>
+						<Route
+							path='/'
+							element={<Index />}
+						/>
+						<Route
+							path='/search'
+							element={<Search />}
+						/>
+						<Route
+							path='/profile/:id'
+							element={<Profile />}
+						/>
+						<Route
+							path='/pin/:id'
+							element={<PinDetail />}
+						/>
+
+						{/* Protected routes */}
+						<Route
+							path='/create'
+							element={
+								<ProtectedRoute>
+									<CreateListing />
+								</ProtectedRoute>
+							}
+						/>
+
+						<Route
+							path='/inbox'
+							element={
+								<ProtectedRoute>
+									<Inbox />
+								</ProtectedRoute>
+							}
+						/>
+
+						<Route
+							path='/my-listings'
+							element={
+								<ProtectedRoute>
+									<MyListings />
+								</ProtectedRoute>
+							}
+						/>
+
+						<Route
+							path='/saved'
+							element={
+								<ProtectedRoute>
+									<SavedItems />
+								</ProtectedRoute>
+							}
+						/>
+
+						<Route
+							path='/settings'
+							element={
+								<ProtectedRoute>
+									<Settings />
+								</ProtectedRoute>
+							}
+						/>
+
+						<Route
+							path='/messages'
+							element={
+								<ProtectedRoute>
+									<Messages />
+								</ProtectedRoute>
+							}
+						/>
+
+						<Route
+							path='/login'
+							element={<Login />}
+						/>
+						<Route
+							path='*'
+							element={<NotFound />}
+						/>
+					</Routes>
+				</AuthProvider>
+			</BrowserRouter>
+		</TooltipProvider>
+	</QueryClientProvider>
 );
 
 export default App;
