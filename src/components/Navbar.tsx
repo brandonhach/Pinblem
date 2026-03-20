@@ -18,6 +18,7 @@ import {
 	AvatarImage,
 } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from "@/contexts/AuthContext";
 
 const notifications = [
@@ -207,7 +208,9 @@ const Navbar = () => {
 										className='relative inline-block'>
 										<Avatar>
 											<AvatarImage src={placeholder_pic} />
-											<AvatarFallback>AVATAR</AvatarFallback>
+											<AvatarFallback>
+												<Spinner className='size-4' />
+											</AvatarFallback>
 										</Avatar>
 										<Badge className='size-4 absolute bottom-0 right-0 rounded-full p-0 z-50'>
 											<ChevronDown className='size-2' />
