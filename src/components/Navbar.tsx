@@ -1,4 +1,4 @@
-import { Search, MapPin, Bell, User, Plus, Menu, Home, MessageCircle, Heart, List, Settings } from "lucide-react";
+import { Search, MapPin, Bell, User, Plus, Menu, Home, MessageCircle, Heart, List, Settings, LogIn } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,8 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useAuth } from "@/contexts/AuthContext";
 
 const notifications = [
   { id: 1, title: "New trade offer", message: "Mickey Mouse pin trade request from StitchLover", time: "2m ago", unread: true, emoji: "🔄" },
@@ -26,6 +28,7 @@ const Navbar = () => {
   const [location, setLocation] = useState("Orlando, FL");
   const [locationSearch, setLocationSearch] = useState("");
   const [showLocationSearch, setShowLocationSearch] = useState(false);
+  const { user } = useAuth();
 
   const suggestedLocations = [
     "Orlando, FL", "Anaheim, CA", "Los Angeles, CA", "New York, NY",
@@ -111,123 +114,144 @@ const Navbar = () => {
 						</Button>
 					</Link>
 
-					{/* Notifications Dropdown */}
-					<DropdownMenu>
-						<DropdownMenuTrigger asChild>
-							<Button
-								variant='ghost'
-								size='icon'
-								className='relative'>
-								<Bell className='h-5 w-5' />
-								{unreadCount > 0 && (
-									<span className='absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground flex items-center justify-center'>
-										{unreadCount}
-									</span>
-								)}
-							</Button>
-						</DropdownMenuTrigger>
-						<DropdownMenuContent
-							align='end'
-							className='w-80'>
-							<div className='flex items-center justify-between px-3 py-2'>
-								<DropdownMenuLabel className='p-0 text-foreground'>
-									Notifications
-								</DropdownMenuLabel>
-								<button className='text-xs text-primary hover:underline font-medium'>
-									Mark all read
-								</button>
-							</div>
-							<DropdownMenuSeparator />
-							<div className='max-h-72 overflow-y-auto'>
-								{notifications.map((n) => (
-									<DropdownMenuItem
-										key={n.id}
-										className={`flex items-start gap-3 py-3 px-3 cursor-pointer ${n.unread ? 'bg-accent/30' : ''}`}>
-										<span className='text-lg mt-0.5 shrink-0'>{n.emoji}</span>
-										<div className='flex-1 min-w-0'>
-											<div className='flex items-center justify-between gap-2'>
-												<span className='text-sm font-medium text-foreground truncate'>
-													{n.title}
-												</span>
-												<span className='text-[10px] text-muted-foreground shrink-0'>
-													{n.time}
-												</span>
-											</div>
-											<p className='text-xs text-muted-foreground mt-0.5 truncate'>
-												{n.message}
-											</p>
-										</div>
-										{n.unread && (
-											<div className='w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0' />
+					{/* Condition: User isLoggedIn */}
+					{user ? (
+						<>
+							{/* Notifications Dropdown */}
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<Button
+										variant='ghost'
+										size='icon'
+										className='relative'>
+										<Bell className='h-5 w-5' />
+										{unreadCount > 0 && (
+											<span className='absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground flex items-center justify-center'>
+												{unreadCount}
+											</span>
 										)}
+									</Button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent
+									align='end'
+									className='w-80'>
+									<div className='flex items-center justify-between px-3 py-2'>
+										<DropdownMenuLabel className='p-0 text-foreground'>
+											Notifications
+										</DropdownMenuLabel>
+										<button className='text-xs text-primary hover:underline font-medium'>
+											Mark all read
+										</button>
+									</div>
+									<DropdownMenuSeparator />
+									<div className='max-h-72 overflow-y-auto'>
+										{notifications.map((n) => (
+											<DropdownMenuItem
+												key={n.id}
+												className={`flex items-start gap-3 py-3 px-3 cursor-pointer ${n.unread ? 'bg-accent/30' : ''}`}>
+												<span className='text-lg mt-0.5 shrink-0'>
+													{n.emoji}
+												</span>
+												<div className='flex-1 min-w-0'>
+													<div className='flex items-center justify-between gap-2'>
+														<span className='text-sm font-medium text-foreground truncate'>
+															{n.title}
+														</span>
+														<span className='text-[10px] text-muted-foreground shrink-0'>
+															{n.time}
+														</span>
+													</div>
+													<p className='text-xs text-muted-foreground mt-0.5 truncate'>
+														{n.message}
+													</p>
+												</div>
+												{n.unread && (
+													<div className='w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0' />
+												)}
+											</DropdownMenuItem>
+										))}
+									</div>
+									<DropdownMenuSeparator />
+									<DropdownMenuItem className='justify-center text-sm text-primary font-medium'>
+										View all notifications
 									</DropdownMenuItem>
-								))}
-							</div>
-							<DropdownMenuSeparator />
-							<DropdownMenuItem className='justify-center text-sm text-primary font-medium'>
-								View all notifications
-							</DropdownMenuItem>
-						</DropdownMenuContent>
-					</DropdownMenu>
+								</DropdownMenuContent>
+							</DropdownMenu>
 
-					{/* Messages */}
-					<Link to='/messages'>
-						<Button
-							variant='ghost'
-							size='icon'
-							className='relative'>
-							<MessageCircle className='h-5 w-5' />
-							<span className='absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground flex items-center justify-center'>
-								2
-							</span>
-						</Button>
-					</Link>
+							{/* Messages */}
+							<Link to='/messages'>
+								<Button
+									variant='ghost'
+									size='icon'
+									className='relative'>
+									<MessageCircle className='h-5 w-5' />
+									<span className='absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground flex items-center justify-center'>
+										2
+									</span>
+								</Button>
+							</Link>
 
-					{/* Profile */}
-					<DropdownMenu>
-						<DropdownMenuTrigger asChild>
-							<Button
-								variant='ghost'
-								size='icon'>
-								<User className='h-5 w-5' />
-							</Button>
-						</DropdownMenuTrigger>
-						<DropdownMenuContent align='end'>
-							<DropdownMenuItem asChild>
-								<Link
-									to='/profile/1'
-									className='flex items-center gap-2'>
-									<User className='h-4 w-4' />
-									My Profile
-								</Link>
-							</DropdownMenuItem>
-							<DropdownMenuItem asChild>
-								<Link
-									to='/my-listings'
-									className='flex items-center gap-2'>
-									<List className='h-4 w-4' />
-									My Listings
-								</Link>
-							</DropdownMenuItem>
-							<DropdownMenuItem asChild>
-								<Link
-									to='/saved'
-									className='flex items-center gap-2'>
-									<Heart className='h-4 w-4' />
-									Saved Items
-								</Link>
-							</DropdownMenuItem>
-							<DropdownMenuSeparator />
-							<DropdownMenuItem asChild>
-								<Link
-									to='/settings'
-									className='flex items-center gap-2'>
-									<Settings className='h-4 w-4' />
-									Settings
-								</Link>
-							</DropdownMenuItem>
-						</DropdownMenuContent>
-					</DropdownMenu>
+							{/* Profile */}
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<Button
+										variant='ghost'
+										size='icon'>
+										<Avatar>
+											<AvatarImage src='https://media.licdn.com/dms/image/v2/D4E03AQFAfDCFW9DVYA/profile-displayphoto-shrink_200_200/profile-displayphoto-shrink_200_200/0/1723082083633?e=1775692800&v=beta&t=3tw2cfhDCnpQKftyRnR1_-huNQ-cW_QGaQxqScN3kig' />
+											<AvatarFallback>CN</AvatarFallback>
+										</Avatar>
+									</Button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align='end'>
+									<DropdownMenuItem asChild>
+										<Link
+											to='/profile/1'
+											className='flex items-center gap-2'>
+											<User className='h-4 w-4' />
+											My Profile
+										</Link>
+									</DropdownMenuItem>
+									<DropdownMenuItem asChild>
+										<Link
+											to='/my-listings'
+											className='flex items-center gap-2'>
+											<List className='h-4 w-4' />
+											My Listings
+										</Link>
+									</DropdownMenuItem>
+									<DropdownMenuItem asChild>
+										<Link
+											to='/saved'
+											className='flex items-center gap-2'>
+											<Heart className='h-4 w-4' />
+											Saved Items
+										</Link>
+									</DropdownMenuItem>
+									<DropdownMenuSeparator />
+									<DropdownMenuItem asChild>
+										<Link
+											to='/settings'
+											className='flex items-center gap-2'>
+											<Settings className='h-4 w-4' />
+											Settings
+										</Link>
+									</DropdownMenuItem>
+								</DropdownMenuContent>
+							</DropdownMenu>
+						</>
+					) : (
+						<>
+							<Link to='/login'>
+								<Button
+									className='gap-2 hidden sm:flex'
+									size='sm'>
+									<LogIn className='h-4 w-4' />
+									Log in
+								</Button>
+							</Link>
+						</>
+					)}
 
 					{/* Mobile Menu */}
 					<Sheet>
@@ -271,51 +295,68 @@ const Navbar = () => {
 											<Search className='h-4 w-4' /> Search
 										</Button>
 									</Link>
-									<Link
-										to='/messages'
-										className='block'>
-										<Button
-											variant='ghost'
-											className='w-full justify-start gap-2'>
-											<MessageCircle className='h-4 w-4' /> Messages
-										</Button>
-									</Link>
-									<Link
-										to='/my-listings'
-										className='block'>
-										<Button
-											variant='ghost'
-											className='w-full justify-start gap-2'>
-											<List className='h-4 w-4' /> My Listings
-										</Button>
-									</Link>
-									<Link
-										to='/saved'
-										className='block'>
-										<Button
-											variant='ghost'
-											className='w-full justify-start gap-2'>
-											<Heart className='h-4 w-4' /> Saved Items
-										</Button>
-									</Link>
-									<Link
-										to='/profile/1'
-										className='block'>
-										<Button
-											variant='ghost'
-											className='w-full justify-start gap-2'>
-											<User className='h-4 w-4' /> Profile
-										</Button>
-									</Link>
-									<Link
-										to='/settings'
-										className='block'>
-										<Button
-											variant='ghost'
-											className='w-full justify-start gap-2'>
-											<Settings className='h-4 w-4' /> Settings
-										</Button>
-									</Link>
+									{user && (
+										<>
+											<Link
+												to='/messages'
+												className='block'>
+												<Button
+													variant='ghost'
+													className='w-full justify-start gap-2'>
+													<MessageCircle className='h-4 w-4' /> Messages
+												</Button>
+											</Link>
+											<Link
+												to='/my-listings'
+												className='block'>
+												<Button
+													variant='ghost'
+													className='w-full justify-start gap-2'>
+													<List className='h-4 w-4' /> My Listings
+												</Button>
+											</Link>
+											<Link
+												to='/saved'
+												className='block'>
+												<Button
+													variant='ghost'
+													className='w-full justify-start gap-2'>
+													<Heart className='h-4 w-4' /> Saved Items
+												</Button>
+											</Link>
+											<Link
+												to='/profile/1'
+												className='block'>
+												<Button
+													variant='ghost'
+													className='w-full justify-start gap-2'>
+													<User className='h-4 w-4' /> Profile
+												</Button>
+											</Link>
+											<Link
+												to='/settings'
+												className='block'>
+												<Button
+													variant='ghost'
+													className='w-full justify-start gap-2'>
+													<Settings className='h-4 w-4' /> Settings
+												</Button>
+											</Link>
+										</>
+									)}
+									{!user && (
+										<>
+											<Link
+												to='/login'
+												className='block'>
+												<Button
+													variant='default'
+													className='w-full justify-start gap-2'>
+													<LogIn className='h-4 w-4' /> Log in
+												</Button>
+											</Link>
+										</>
+									)}
 								</div>
 
 								<div>
@@ -369,12 +410,16 @@ const Navbar = () => {
 										</div>
 									)}
 								</div>
-								<Link to='/create'>
-									<Button className='w-full gap-2'>
-										<Plus className='h-4 w-4' />
-										Create Listing
-									</Button>
-								</Link>
+								{user && (
+									<>
+										<Link to='/create'>
+											<Button className='w-full gap-2'>
+												<Plus className='h-4 w-4' />
+												Create Listing
+											</Button>
+										</Link>
+									</>
+								)}
 							</div>
 						</SheetContent>
 					</Sheet>
