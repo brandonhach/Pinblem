@@ -1,4 +1,4 @@
-import { Search, MapPin, Bell, User, Plus, Menu, Home, MessageCircle, Heart, List, Settings, LogIn } from "lucide-react";
+import { Search, MapPin, Bell, User, Plus, Menu, Home, MessageCircle, Heart, List, Settings, LogIn, ChevronDown } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,12 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+	Avatar,
+	AvatarFallback,
+	AvatarImage,
+} from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { useAuth } from "@/contexts/AuthContext";
 
 const notifications = [
@@ -41,7 +46,9 @@ const Navbar = () => {
   );
 
 
-  const unreadCount = notifications.filter(n => n.unread).length;
+	const unreadCount = notifications.filter(n => n.unread).length;
+	
+	const placeholder_pic = 'https://media.licdn.com/dms/image/v2/D4E03AQFAfDCFW9DVYA/profile-displayphoto-shrink_200_200/profile-displayphoto-shrink_200_200/0/1723082083633?e=1775692800&v=beta&t=3tw2cfhDCnpQKftyRnR1_-huNQ-cW_QGaQxqScN3kig';
 
   return (
 		<header className='sticky top-0 z-50 w-full border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80'>
@@ -116,7 +123,7 @@ const Navbar = () => {
 
 					{/* Condition: User isLoggedIn */}
 					{user ? (
-						<>
+						<div className='hidden sm:flex gap-2'>
 							{/* Notifications Dropdown */}
 							<DropdownMenu>
 								<DropdownMenuTrigger asChild>
@@ -196,11 +203,15 @@ const Navbar = () => {
 								<DropdownMenuTrigger asChild>
 									<Button
 										variant='ghost'
-										size='icon'>
+										size='icon'
+										className='relative inline-block'>
 										<Avatar>
-											<AvatarImage src='https://media.licdn.com/dms/image/v2/D4E03AQFAfDCFW9DVYA/profile-displayphoto-shrink_200_200/profile-displayphoto-shrink_200_200/0/1723082083633?e=1775692800&v=beta&t=3tw2cfhDCnpQKftyRnR1_-huNQ-cW_QGaQxqScN3kig' />
-											<AvatarFallback>CN</AvatarFallback>
+											<AvatarImage src={placeholder_pic} />
+											<AvatarFallback>AVATAR</AvatarFallback>
 										</Avatar>
+										<Badge className='size-4 absolute bottom-0 right-0 rounded-full p-0 z-50'>
+											<ChevronDown className='size-2' />
+										</Badge>
 									</Button>
 								</DropdownMenuTrigger>
 								<DropdownMenuContent align='end'>
@@ -239,7 +250,7 @@ const Navbar = () => {
 									</DropdownMenuItem>
 								</DropdownMenuContent>
 							</DropdownMenu>
-						</>
+						</div>
 					) : (
 						<>
 							<Link to='/login'>
