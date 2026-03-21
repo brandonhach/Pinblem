@@ -8,17 +8,22 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Spinner } from '@/components/ui/spinner';
 import { toast } from "sonner";
 import { supabase } from "@/utils/supabaseClient";
 
 const Settings = () => {
   const [profile, setProfile] = useState({
-    username: "DisneyFan23",
-    email: "disneyfan23@email.com",
-    bio: "Disney pin collector since 2005. Specializing in limited edition and park exclusive pins.",
-    location: "Orlando, FL",
-    phone: "+1 (407) 555-0123",
-  });
+		username: 'DisneyFan23',
+		email: 'disneyfan23@email.com',
+		bio: 'Disney pin collector since 2005. Specializing in limited edition and park exclusive pins.',
+		location: 'Orlando, FL',
+		phone: '+1 (407) 555-0123',
+		avatar:
+			'https://media.licdn.com/dms/image/v2/D4E03AQFAfDCFW9DVYA/profile-displayphoto-shrink_200_200/profile-displayphoto-shrink_200_200/0/1723082083633?e=1775692800&v=beta&t=3tw2cfhDCnpQKftyRnR1_-huNQ-cW_QGaQxqScN3kig',
+	});
+	
+  const [signingOut, setSigningOut] = useState(false);
 
   const [notifications, setNotifications] = useState({
     tradeOffers: true,
@@ -67,7 +72,8 @@ const Settings = () => {
     toast.success("Privacy setting updated");
   };
 
-  const handleSignOut = async () => {
+	const handleSignOut = async () => {
+	setSigningOut(true);
     await supabase.auth.signOut();
     toast.success("Signed out successfully");
   }
@@ -114,7 +120,11 @@ const Settings = () => {
 												className='w-full h-full object-cover'
 											/>
 										) : (
-											'🏰'
+											<img
+												src={profile.avatar}
+												alt='Avatar'
+												className='w-full h-full object-cover'
+											/>
 										)}
 									</div>
 									<Button
@@ -330,7 +340,8 @@ const Settings = () => {
 									variant='outline'
 									className='w-full justify-start gap-2 text-destructive border-destructive/30 hover:bg-destructive/10'
 									onClick={handleSignOut}>
-									<LogOut className='h-4 w-4' />
+									{signingOut && <Spinner className='size-4' />}
+									{!signingOut && <LogOut className='h-4 w-4' />}
 									Sign Out
 								</Button>
 								<Button
