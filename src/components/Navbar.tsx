@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from "@/contexts/AuthContext";
 
+
 const notifications = [
   { id: 1, title: "New trade offer", message: "Mickey Mouse pin trade request from StitchLover", time: "2m ago", unread: true, emoji: "🔄" },
   { id: 2, title: "Price drop alert", message: "Stitch pin is now $15", time: "1h ago", unread: true, emoji: "💰" },
@@ -34,7 +35,7 @@ const Navbar = () => {
   const [location, setLocation] = useState("Orlando, FL");
   const [locationSearch, setLocationSearch] = useState("");
   const [showLocationSearch, setShowLocationSearch] = useState(false);
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
   const suggestedLocations = [
     "Orlando, FL", "Anaheim, CA", "Los Angeles, CA", "New York, NY",
@@ -47,9 +48,8 @@ const Navbar = () => {
   );
 
 
-	const unreadCount = notifications.filter(n => n.unread).length;
-	
-	const placeholder_pic = 'https://media.licdn.com/dms/image/v2/D4E03AQFAfDCFW9DVYA/profile-displayphoto-shrink_200_200/profile-displayphoto-shrink_200_200/0/1723082083633?e=1775692800&v=beta&t=3tw2cfhDCnpQKftyRnR1_-huNQ-cW_QGaQxqScN3kig';
+   const unreadCount = notifications.filter(n => n.unread).length;
+
 
   return (
 		<header className='sticky top-0 z-50 w-full border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80'>
@@ -207,7 +207,7 @@ const Navbar = () => {
 										size='icon'
 										className='relative inline-block'>
 										<Avatar>
-											<AvatarImage src={placeholder_pic} />
+											<AvatarImage src={profile?.avatar_url} />
 											<AvatarFallback>
 												<Spinner className='size-4' />
 											</AvatarFallback>
