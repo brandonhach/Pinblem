@@ -11,17 +11,41 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Spinner } from '@/components/ui/spinner';
 import { toast } from "sonner";
 import { supabase } from "@/utils/supabaseClient";
+import { useAuth } from "@/contexts/AuthContext";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const Settings = () => {
+  
   const [profile, setProfile] = useState({
-		username: 'DisneyFan23',
-		email: 'disneyfan23@email.com',
-		bio: 'Disney pin collector since 2005. Specializing in limited edition and park exclusive pins.',
-		location: 'Orlando, FL',
-		phone: '+1 (407) 555-0123',
-		avatar:
-			'https://media.licdn.com/dms/image/v2/D4E03AQFAfDCFW9DVYA/profile-displayphoto-shrink_200_200/profile-displayphoto-shrink_200_200/0/1723082083633?e=1775692800&v=beta&t=3tw2cfhDCnpQKftyRnR1_-huNQ-cW_QGaQxqScN3kig',
-	});
+		username: '',
+		bio: '',
+		location: '',
+	  	avatar: ''
+  });
+	const { user } = useAuth();
+
+	const loadProfile = async () => {
+		const { data, error } = await supabase
+			.from('users')
+			.select('*')
+			.eq('id', user.id)
+			.single();
+
+		if (error) {
+			console.error('Error fetching user data:', error);
+			return;
+		}
+
+		setProfile(prev => ({
+			...prev,
+			username: data.username,
+			bio: data.bio,
+			location: data.location,
+			avatar: data.avatar_url,
+		}));
+	};
+
+	loadProfile();
 	
   const [signingOut, setSigningOut] = useState(false);
 
@@ -73,10 +97,10 @@ const Settings = () => {
   };
 
 	const handleSignOut = async () => {
-	setSigningOut(true);
-    await supabase.auth.signOut();
-    toast.success("Signed out successfully");
-  }
+		setSigningOut(true);
+		await supabase.auth.signOut();
+		toast.success("Signed out successfully");
+	};
 
 
   return (
@@ -108,25 +132,21 @@ const Settings = () => {
 								<h2 className='font-display text-lg font-semibold text-foreground'>
 									Profile
 								</h2>
-							</div>
-
-							<div className='space-y-4'>
+						  </div>
+						  
+							{/* Form */}
+							<form className='space-y-4'>
 								<div className='flex items-center gap-4 mb-4'>
-									<div className='w-16 h-16 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-3xl shrink-0 overflow-hidden'>
-										{avatarPreview ? (
-											<img
-												src={avatarPreview}
-												alt='Avatar'
-												className='w-full h-full object-cover'
-											/>
+									<Avatar className="size-24">
+										{avatarPreview ? (		
+											<AvatarImage src={profile.avatar} />
 										) : (
-											<img
-												src={profile.avatar}
-												alt='Avatar'
-												className='w-full h-full object-cover'
-											/>
+											<AvatarImage src={profile.avatar} />
 										)}
-									</div>
+										<AvatarFallback>
+											<Spinner className='size-4' />
+										</AvatarFallback>
+									</Avatar>
 									<Button
 										variant='outline'
 										size='sm'
@@ -146,33 +166,6 @@ const Settings = () => {
 										}
 									/>
 								</div>
-
-								<div>
-									<label className='text-sm font-medium text-foreground mb-1.5 block'>
-										Email
-									</label>
-									<Input
-										type='email'
-										value={profile.email}
-										onChange={(e) =>
-											setProfile((p) => ({ ...p, email: e.target.value }))
-										}
-									/>
-								</div>
-
-								<div>
-									<label className='text-sm font-medium text-foreground mb-1.5 block'>
-										Phone
-									</label>
-									<Input
-										type='tel'
-										value={profile.phone}
-										onChange={(e) =>
-											setProfile((p) => ({ ...p, phone: e.target.value }))
-										}
-									/>
-								</div>
-
 								<div>
 									<label className='text-sm font-medium text-foreground mb-1.5 block'>
 										Location
@@ -203,7 +196,7 @@ const Settings = () => {
 									className='w-full sm:w-auto'>
 									Save Profile
 								</Button>
-							</div>
+							</form>
 						</section>
 
 						{/* Notifications Section */}
@@ -227,11 +220,11 @@ const Settings = () => {
 										label: 'Messages',
 										desc: 'New message notifications',
 									},
-									{
-										key: 'priceDrops' as const,
-										label: 'Price Drops',
-										desc: 'When saved items go on sale',
-									},
+									// {
+									// 	key: 'priceDrops' as const,
+									// 	label: 'Price Drops',
+									// 	desc: 'When saved items go on sale',
+									// },
 									{
 										key: 'newListings' as const,
 										label: 'New Listings',
@@ -277,7 +270,7 @@ const Settings = () => {
 								</h2>
 							</div>
 
-							<div className='space-y-4'>
+							{/* <div className='space-y-4'>
 								{[
 									{
 										key: 'publicProfile' as const,
@@ -317,7 +310,7 @@ const Settings = () => {
 										/>
 									</div>
 								))}
-							</div>
+							</div> */}
 						</section>
 
 						{/* Account Section */}
@@ -330,12 +323,12 @@ const Settings = () => {
 							</div>
 
 							<div className='space-y-3'>
-								<Button
+								{/* <Button
 									variant='outline'
 									className='w-full justify-start gap-2'>
 									<Shield className='h-4 w-4' />
 									Change Password
-								</Button>
+								</Button> */}
 								<Button
 									variant='outline'
 									className='w-full justify-start gap-2 text-destructive border-destructive/30 hover:bg-destructive/10'
@@ -346,6 +339,7 @@ const Settings = () => {
 								</Button>
 								<Button
 									variant='ghost'
+									disabled
 									className='w-full justify-start gap-2 text-destructive hover:text-destructive hover:bg-destructive/10'>
 									<Trash2 className='h-4 w-4' />
 									Delete Account
