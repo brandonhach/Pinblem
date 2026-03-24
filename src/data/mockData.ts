@@ -1,21 +1,23 @@
-export interface Pin {
-  id: number;
-  title: string;
-  price: number;
-  image: string;
-  location: string;
-  seller: string;
-  sellerId: number;
-  sellerAvatar: string;
-  condition: "new" | "like-new" | "good" | "fair";
-  isTradeOnly: boolean;
-  isFavorite?: boolean;
-  category: string;
-  description: string;
-  listingType: "buy" | "sell" | "trade";
-  createdAt: string;
-  bumpedAt?: string;
-}
+export type Pin = {
+	id: string;
+	user_id: string;
+	title: string;
+	description: string;
+	price: number | null;
+	category: string;
+	images: string[];
+	listing_type: 'sell' | 'trade' | 'both';
+	condition: 'new' | 'like-new' | 'good' | 'fair';
+	location: string;
+	created_at: string;
+  bumped_cat: string;
+  rating: number;
+	isTradeOnly: boolean;
+	verified: boolean;
+	isFavorite?: boolean;
+	username: string; // from join
+	avatar_url: string; // from join
+};
 
 export interface Seller {
   id: number;
