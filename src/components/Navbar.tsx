@@ -31,7 +31,6 @@ const notifications = [
 ];
 
 const Navbar = () => {
-  const [searchQuery, setSearchQuery] = useState("");
   const [location, setLocation] = useState("Orlando, FL");
   const [locationSearch, setLocationSearch] = useState("");
   const [showLocationSearch, setShowLocationSearch] = useState(false);
@@ -67,48 +66,6 @@ const Navbar = () => {
 						Pinblem
 					</span>
 				</Link>
-
-				{/* Search Bar - Desktop */}
-				<div className='flex-1 max-w-2xl hidden md:flex items-center gap-2'>
-					<div className='relative flex-1'>
-						<Search className='absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground' />
-						<Input
-							type='search'
-							placeholder='Search pins, collections, sellers...'
-							value={searchQuery}
-							onChange={(e) => setSearchQuery(e.target.value)}
-							className='pl-10 pr-4 h-10 bg-muted/50 border-0 focus-visible:ring-1 focus-visible:ring-primary'
-						/>
-					</div>
-
-					{/* Location Selector */}
-					<DropdownMenu>
-						<DropdownMenuTrigger asChild>
-							<Button
-								variant='ghost'
-								className='gap-2 text-muted-foreground hover:text-foreground shrink-0'>
-								<MapPin className='h-4 w-4' />
-								<span className='hidden lg:inline max-w-[120px] truncate'>
-									{location}
-								</span>
-							</Button>
-						</DropdownMenuTrigger>
-						<DropdownMenuContent align='end'>
-							<DropdownMenuItem onClick={() => setLocation('Orlando, FL')}>
-								Orlando, FL
-							</DropdownMenuItem>
-							<DropdownMenuItem onClick={() => setLocation('Anaheim, CA')}>
-								Anaheim, CA
-							</DropdownMenuItem>
-							<DropdownMenuItem onClick={() => setLocation('Los Angeles, CA')}>
-								Los Angeles, CA
-							</DropdownMenuItem>
-							<DropdownMenuItem onClick={() => setLocation('New York, NY')}>
-								New York, NY
-							</DropdownMenuItem>
-						</DropdownMenuContent>
-					</DropdownMenu>
-				</div>
 
 				{/* Actions */}
 				<div className='flex items-center gap-1 ml-auto'>
@@ -201,6 +158,37 @@ const Navbar = () => {
 
 							{/* Profile */}
 							<DropdownMenu>
+								{/* Location Selector */}
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<Button
+											variant='ghost'
+											className='gap-2 text-muted-foreground hover:text-foreground shrink-0'>
+											<MapPin className='h-4 w-4' />
+											<span className='hidden lg:inline max-w-[120px] truncate'>
+												{location}
+											</span>
+										</Button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent align='end'>
+										<DropdownMenuItem
+											onClick={() => setLocation('Orlando, FL')}>
+											Orlando, FL
+										</DropdownMenuItem>
+										<DropdownMenuItem
+											onClick={() => setLocation('Anaheim, CA')}>
+											Anaheim, CA
+										</DropdownMenuItem>
+										<DropdownMenuItem
+											onClick={() => setLocation('Los Angeles, CA')}>
+											Los Angeles, CA
+										</DropdownMenuItem>
+										<DropdownMenuItem
+											onClick={() => setLocation('New York, NY')}>
+											New York, NY
+										</DropdownMenuItem>
+									</DropdownMenuContent>
+								</DropdownMenu>
 								<DropdownMenuTrigger asChild>
 									<Button
 										variant='ghost'
