@@ -220,7 +220,7 @@ const Navbar = () => {
 								<DropdownMenuContent align='end'>
 									<DropdownMenuItem asChild>
 										<Link
-											to='/profile/1'
+											to={`/profile/${user.id}`}
 											className='flex items-center gap-2'>
 											<User className='h-4 w-4' />
 											My Profile
