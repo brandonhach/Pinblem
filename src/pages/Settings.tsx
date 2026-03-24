@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, User, Bell, Shield, Eye, LogOut, Trash2, Upload, ImageIcon } from "lucide-react";
 import Navbar from "@/components/Navbar";
@@ -13,103 +13,178 @@ import { toast } from "sonner";
 import { supabase } from "@/utils/supabaseClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { z } from 'zod';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 
 const Settings = () => {
-  
-  const [profile, setProfile] = useState({
-		username: '',
-		bio: '',
-		location: '',
-	  	avatar: ''
-  });
 	const { user } = useAuth();
+	const [avatarUrl, setAvatarUrl] = useState<string>('');
+	const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
+	const [avatarUploading, setAvatarUploading] = useState(false);
+	const [avatarFile, setAvatarFile] = useState<File | null>(null);
+	const [avatarPreview, setAvatarPreview] = useState<string>('');
+	const [signingOut, setSigningOut] = useState(false);
+	const fileInputRef = useRef<HTMLInputElement>(null);
+	const [notifications, setNotifications] = useState({
+		tradeOffers: true,
+		messages: true,
+		priceDrops: true,
+		newListings: false,
+		newsletter: false,
+		pushEnabled: true,
+	});
 
-	const loadProfile = async () => {
-		const { data, error } = await supabase
-			.from('users')
-			.select('*')
-			.eq('id', user.id)
-			.single();
+	const profileSchema = z.object({
+		username: z
+			.string()
+			.min(3, 'Username must be at least 3 characters')
+			.max(30, 'Username must be under 30 characters')
+			.regex(/^[a-zA-Z0-9_-]+$/, 'Only letters, numbers, and underscores'),
+		bio: z
+			.string()
+			.max(160, 'Bio must be under 160 characters')
+			.optional()
+			.or(z.literal('')),
+		location: z
+			.string()
+			.max(100, 'Location must be under 100 characters')
+			.optional()
+			.or(z.literal('')),
+	});
 
-		if (error) {
-			console.error('Error fetching user data:', error);
+	type ProfileFormValues = z.infer<typeof profileSchema>;
+
+	const form = useForm<ProfileFormValues>({
+		resolver: zodResolver(profileSchema),
+		defaultValues: { username: '', bio: '', location: '' },
+	});
+
+	const {
+		register,
+		handleSubmit,
+		reset,
+		formState: { errors, isDirty, isSubmitting },
+	} = form;
+
+	// --- Load profile and reset form with real values ---
+	useEffect(() => {
+		const loadProfile = async () => {
+			const { data, error } = await supabase
+				.from('users')
+				.select('*')
+				.eq('id', user.id)
+				.single();
+
+			if (error) {
+				console.error('Error fetching user data:', error);
+				return;
+			}
+
+			// reset() sets the form's "default values" so isDirty tracks against these
+			reset({
+				username: data.username ?? '',
+				bio: data.bio ?? '',
+				location: data.location ?? '',
+			});
+
+			setAvatarUrl(data.avatar_url ?? '');
+		};
+
+		if (user?.id) loadProfile();
+	}, [user?.id, reset]);
+
+	// --- Avatar upload to Supabase Storage ---
+	// handleFileSelect — preview only, no upload
+	const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		if (!file) return;
+
+		if (!file.type.startsWith('image/')) {
+			toast.error('Please select an image file');
 			return;
 		}
 
-		setProfile(prev => ({
-			...prev,
-			username: data.username,
-			bio: data.bio,
-			location: data.location,
-			avatar: data.avatar_url,
-		}));
+		if (file.size > 5 * 1024 * 1024) {
+			toast.error('Image must be under 5MB');
+			return;
+		}
+
+		setAvatarFile(file);
+		setAvatarPreview(URL.createObjectURL(file)); // local blob URL, no network request
+		setAvatarDialogOpen(false);
 	};
 
-	loadProfile();
-	
-  const [signingOut, setSigningOut] = useState(false);
+	// onSubmit — upload only if a new file was selected
+	const onSubmit = async (values: ProfileFormValues) => {
+		let finalAvatarUrl = avatarUrl; // fallback to existing
 
-  const [notifications, setNotifications] = useState({
-    tradeOffers: true,
-    messages: true,
-    priceDrops: true,
-    newListings: false,
-    newsletter: false,
-    pushEnabled: true,
-  });
+		if (avatarFile) {
+			setAvatarUploading(true);
+			try {
+				const ext = avatarFile.name.split('.').pop();
+				const filePath = `avatars/${user.id}.${ext}`;
 
-  const [privacy, setPrivacy] = useState({
-    showLocation: true,
-    showEmail: false,
-    showPhone: false,
-    publicProfile: true,
-  });
+				const { error: uploadError } = await supabase.storage
+					.from('avatars')
+					.upload(filePath, avatarFile, { upsert: true });
 
-  const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+				if (uploadError) throw uploadError;
 
-  const handleProfileSave = () => {
-    toast.success("Profile updated successfully!");
-  };
+				const { data: urlData } = supabase.storage
+					.from('avatars')
+					.getPublicUrl(filePath);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please select an image file");
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    setAvatarPreview(url);
-    toast.success("Avatar updated!");
-    setAvatarDialogOpen(false);
-  };
+				finalAvatarUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+				setAvatarUrl(finalAvatarUrl);
+				setAvatarFile(null); // clear pending file
+			} catch (err) {
+				console.error(err);
+				toast.error('Failed to upload avatar');
+				setAvatarUploading(false);
+				return;
+			}
+			setAvatarUploading(false);
+		}
 
-  const handleNotificationToggle = (key: keyof typeof notifications) => {
-    setNotifications(prev => ({ ...prev, [key]: !prev[key] }));
-    toast.success("Notification preference updated");
-  };
+		const { error } = await supabase
+			.from('users')
+			.update({
+				username: values.username,
+				bio: values.bio,
+				location: values.location,
+				avatar_url: finalAvatarUrl,
+			})
+			.eq('id', user.id);
 
-  const handlePrivacyToggle = (key: keyof typeof privacy) => {
-    setPrivacy(prev => ({ ...prev, [key]: !prev[key] }));
-    toast.success("Privacy setting updated");
-  };
+		if (error) {
+			toast.error('Failed to save profile');
+			return;
+		}
+
+		reset(values);
+		toast.success('Profile updated successfully!');
+	};
+
+	const handleNotificationToggle = (key: keyof typeof notifications) => {
+		setNotifications((prev) => ({ ...prev, [key]: !prev[key] }));
+		toast.success('Notification preference updated');
+	};
 
 	const handleSignOut = async () => {
 		setSigningOut(true);
 		await supabase.auth.signOut();
-		toast.success("Signed out successfully");
+		toast.success('Signed out successfully');
 	};
 
-
-  return (
+	return (
 		<div className='min-h-screen bg-background'>
 			<Navbar />
 			<SignedOutGuard message='Sign in to manage your account settings.'>
+				{/* ... back button ... */}
 				<div className='container px-4 py-3'>
-					<Link to='/'>
-						<Button
+ 					<Link to='/'>
+ 						<Button
 							variant='ghost'
 							size='sm'
 							className='gap-2'>
@@ -132,68 +207,77 @@ const Settings = () => {
 								<h2 className='font-display text-lg font-semibold text-foreground'>
 									Profile
 								</h2>
-						  </div>
-						  
-							{/* Form */}
-							<form className='space-y-4'>
+							</div>
+
+							<form
+								onSubmit={handleSubmit(onSubmit)}
+								className='space-y-4'>
+								{/* Avatar */}
 								<div className='flex items-center gap-4 mb-4'>
-									<Avatar className="size-24">
-										{avatarPreview ? (		
-											<AvatarImage src={profile.avatar} />
-										) : (
-											<AvatarImage src={profile.avatar} />
-										)}
+									<Avatar className='size-24'>
+										<AvatarImage src={avatarPreview || avatarUrl} />
 										<AvatarFallback>
 											<Spinner className='size-4' />
 										</AvatarFallback>
 									</Avatar>
 									<Button
+										type='button'
 										variant='outline'
 										size='sm'
+										disabled={avatarUploading}
 										onClick={() => setAvatarDialogOpen(true)}>
-										Change Avatar
+										{avatarUploading ? 'Uploading...' : 'Change Avatar'}
 									</Button>
 								</div>
 
+								{/* Username */}
 								<div>
 									<label className='text-sm font-medium text-foreground mb-1.5 block'>
 										Username
 									</label>
-									<Input
-										value={profile.username}
-										onChange={(e) =>
-											setProfile((p) => ({ ...p, username: e.target.value }))
-										}
-									/>
+									<Input {...register('username')} />
+									{errors.username && (
+										<p className='text-xs text-destructive mt-1'>
+											{errors.username.message}
+										</p>
+									)}
 								</div>
+
+								{/* Location */}
 								<div>
 									<label className='text-sm font-medium text-foreground mb-1.5 block'>
 										Location
 									</label>
-									<Input
-										value={profile.location}
-										onChange={(e) =>
-											setProfile((p) => ({ ...p, location: e.target.value }))
-										}
-									/>
+									<Input {...register('location')} />
+									{errors.location && (
+										<p className='text-xs text-destructive mt-1'>
+											{errors.location.message}
+										</p>
+									)}
 								</div>
 
+								{/* Bio */}
 								<div>
 									<label className='text-sm font-medium text-foreground mb-1.5 block'>
 										Bio
 									</label>
 									<Textarea
-										value={profile.bio}
-										onChange={(e) =>
-											setProfile((p) => ({ ...p, bio: e.target.value }))
-										}
+										{...register('bio')}
 										rows={3}
 									/>
+									{errors.bio && (
+										<p className='text-xs text-destructive mt-1'>
+											{errors.bio.message}
+										</p>
+									)}
 								</div>
 
+								{/* Save — disabled until something changes */}
 								<Button
-									onClick={handleProfileSave}
+									type='submit'
+									disabled={(!isDirty && !avatarFile) || isSubmitting}
 									className='w-full sm:w-auto'>
+									{isSubmitting ? <Spinner className='size-4 mr-2' /> : null}
 									Save Profile
 								</Button>
 							</form>
@@ -350,7 +434,7 @@ const Settings = () => {
 				</main>
 			</SignedOutGuard>
 
-			{/* Avatar Upload Dialog */}
+			{/* Avatar Dialog */}
 			<Dialog
 				open={avatarDialogOpen}
 				onOpenChange={setAvatarDialogOpen}>
@@ -373,6 +457,7 @@ const Settings = () => {
 							</p>
 						</div>
 						<Button
+							type='button'
 							variant='outline'
 							size='sm'
 							className='gap-2'>
@@ -391,6 +476,5 @@ const Settings = () => {
 			</Dialog>
 		</div>
 	);
-};
-
+};;;
 export default Settings;
