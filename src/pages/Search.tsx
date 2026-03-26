@@ -19,7 +19,7 @@ const Search = () => {
 	const [showFilters, setShowFilters] = useState(false);
 	const [selectedCategory, setSelectedCategory] = useState('all');
 	const [selectedListingType, setSelectedListingType] = useState('all');
-	const [priceRange, setPriceRange] = useState<[number, number]>([0, 200]);
+	const [priceRange, setPriceRange] = useState<[number, number]>([0, 15000]);
 	const [sortBy, setSortBy] = useState('newest');
 	const [selectedConditions, setSelectedConditions] = useState<string[]>([]);
 	const [selectedLocation, setSelectedLocation] = useState('all');
