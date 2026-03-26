@@ -426,7 +426,7 @@ const PinDetail = () => {
 							) : (
 								<>
 									<div className='flex gap-2 pt-4'>
-										{pin.isTradeOnly ? (
+										{pin.listing_type === 'trade' ? (
 											<Button
 												className='flex-1 gap-2'
 												onClick={handleProposeTrade}
@@ -583,7 +583,7 @@ const PinDetail = () => {
 									{pin.title}
 								</div>
 								<div className='text-xs text-primary font-semibold'>
-									{pin.isTradeOnly ? 'Trade Only' : `$${pin.price}`}
+									{pin.listing_type === 'trade' ? 'Trade Only' : `$${pin.price}`}
 								</div>
 							</div>
 						</div>
