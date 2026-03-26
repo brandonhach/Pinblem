@@ -98,7 +98,7 @@ const ListingCard = ({ pin, to, onClick }: ListingCardProps) => {
 			{/* Image */}
 			<div className='relative aspect-square overflow-hidden bg-muted'>
 				<img
-					src={!hovered ? pin?.images[0] : pin?.images[1]}
+					src={!hovered ? pin?.images[0] : pin.images[1] || pin?.images[0]}
 					alt={pin.title}
 					onMouseEnter={() => setHovered(true)}
 					onMouseLeave={() => setHovered(false)}
