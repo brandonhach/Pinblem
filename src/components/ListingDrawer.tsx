@@ -284,9 +284,9 @@ const ListingDrawer = ({ pin, isOpen, onClose }: ListingDrawerProps) => {
 					</Link>
 
 					{/* CTA */}
-					<Link to={`/pin/${pin.id}`}>
+					<Link to={`/pin/${pin.id}`} className='pt-2'>
 						<Button className='w-full h-12 text-base gap-2'>
-							<Eye className='size-5' />
+							{/* <Eye className='size-5' /> */}
 							View more
 						</Button>
 					</Link>
