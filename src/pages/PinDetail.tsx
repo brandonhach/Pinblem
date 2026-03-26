@@ -10,6 +10,7 @@ import {
 	RefreshCw,
 	ShoppingCart,
 	Send,
+  SquarePen,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
@@ -421,60 +422,74 @@ const PinDetail = () => {
 							</div>
 
 							{/* Action Buttons */}
-							<div className='flex gap-3 pt-4'>
-								{pin.isTradeOnly ? (
+							{user.id === pin.user_id ? (
+								<>
 									<Button
-										className='flex-1 gap-2'
-										onClick={handleProposeTrade}
-										disabled={isTradeLoading}>
-										{isTradeLoading ? (
-											<>
-												<span className='h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent' />
-												Loading…
-											</>
+										variant='default'
+										className='w-full gap-2'
+										onClick={() => setMessageDrawerOpen(true)}>
+										<SquarePen className="size-4"/>
+										Edit listing
+									</Button>
+								</>
+							) : (
+								<>
+									<div className='flex gap-3 pt-4'>
+										{pin.isTradeOnly ? (
+											<Button
+												className='flex-1 gap-2'
+												onClick={handleProposeTrade}
+												disabled={isTradeLoading}>
+												{isTradeLoading ? (
+													<>
+														<span className='h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent' />
+														Loading…
+													</>
+												) : (
+													<>
+														<RefreshCw className='h-4 w-4' />
+														Propose Trade
+													</>
+												)}
+											</Button>
 										) : (
 											<>
-												<RefreshCw className='h-4 w-4' />
-												Propose Trade
+												<Button
+													className='flex-1 gap-2'
+													onClick={handleBuyNow}>
+													<ShoppingCart className='h-4 w-4' />
+													Buy Now
+												</Button>
+												<Button
+													variant='outline'
+													className='gap-2'
+													onClick={handleProposeTrade}
+													disabled={isTradeLoading}>
+													{isTradeLoading ? (
+														<>
+															<span className='h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent' />
+															Loading…
+														</>
+													) : (
+														<>
+															<RefreshCw className='h-4 w-4' />
+															Offer Trade
+														</>
+													)}
+												</Button>
 											</>
 										)}
-									</Button>
-								) : (
-									<>
-										<Button
-											className='flex-1 gap-2'
-											onClick={handleBuyNow}>
-											<ShoppingCart className='h-4 w-4' />
-											Buy Now
-										</Button>
-										<Button
-											variant='outline'
-											className='gap-2'
-											onClick={handleProposeTrade}
-											disabled={isTradeLoading}>
-											{isTradeLoading ? (
-												<>
-													<span className='h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent' />
-													Loading…
-												</>
-											) : (
-												<>
-													<RefreshCw className='h-4 w-4' />
-													Offer Trade
-												</>
-											)}
-										</Button>
-									</>
-								)}
-							</div>
+									</div>
 
-							<Button
-								variant='ghost'
-								className='w-full gap-2'
-								onClick={() => setMessageDrawerOpen(true)}>
-								<MessageCircle className='h-4 w-4' />
-								Message Seller
-							</Button>
+									<Button
+										variant='ghost'
+										className='w-full gap-2'
+										onClick={() => setMessageDrawerOpen(true)}>
+										<MessageCircle className='h-4 w-4' />
+										Message Seller
+									</Button>
+								</>
+							)}
 						</div>
 					</div>
 
