@@ -20,6 +20,7 @@ const ListingCard = ({ pin, to, onClick }: ListingCardProps) => {
 	const navigate = useNavigate();
 	const [isSaved, setIsSaved] = useState(pin.isFavorite ?? false);
 	const [savingInProgress, setSavingInProgress] = useState(false);
+	const [hovered, setHovered] = useState(false);
 
 	const formatTimeAgo = (dateStr: string) => {
 		const diff = Date.now() - new Date(dateStr).getTime();
@@ -97,8 +98,10 @@ const ListingCard = ({ pin, to, onClick }: ListingCardProps) => {
 			{/* Image */}
 			<div className='relative aspect-square overflow-hidden bg-muted'>
 				<img
-					src={pin.images?.[0]}
+					src={!hovered ? pin?.images[0] : pin?.images[1]}
 					alt={pin.title}
+					onMouseEnter={() => setHovered(true)}
+					onMouseLeave={() => setHovered(false)}
 					loading='lazy'
 					className='w-full h-full object-cover transition-transform duration-300 group-hover:scale-105'
 				/>
