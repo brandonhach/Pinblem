@@ -4,7 +4,7 @@ import {
 	Share2,
 	MapPin,
 	Star,
-	MessageCircle,
+	Eye,
 	ChevronLeft,
 	ChevronRight,
 	Shield,
@@ -284,10 +284,12 @@ const ListingDrawer = ({ pin, isOpen, onClose }: ListingDrawerProps) => {
 					</Link>
 
 					{/* CTA */}
-					<Button className='w-full h-12 text-base gap-2'>
-						<MessageCircle className='h-5 w-5' />
-						Message Seller
-					</Button>
+					<Link to={`/pin/${pin.id}`}>
+						<Button className='w-full h-12 text-base gap-2'>
+							<Eye className='size-5' />
+							View more
+						</Button>
+					</Link>
 
 					{/* Similar Items */}
 					{similarPins.length > 0 && (
