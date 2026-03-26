@@ -327,7 +327,7 @@ const Navbar = () => {
 												</Button>
 											</Link>
 											<Link
-												to='/profile/1'
+												to={`/profile/${user.id}`}
 												className='block'>
 												<Button
 													variant='ghost'
