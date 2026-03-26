@@ -245,7 +245,7 @@ const ListingDrawer = ({ pin, isOpen, onClose }: ListingDrawerProps) => {
 					{/* Description */}
 					<div className='space-y-2'>
 						<h3 className='font-medium text-foreground'>Description</h3>
-						<p className='text-sm text-muted-foreground leading-relaxed'>
+						<p className='text-sm text-muted-foreground leading-relaxed break-words'>
 							{pin.description}
 						</p>
 					</div>
