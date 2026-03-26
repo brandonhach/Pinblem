@@ -290,61 +290,6 @@ const ListingDrawer = ({ pin, isOpen, onClose }: ListingDrawerProps) => {
 							View more
 						</Button>
 					</Link>
-
-					{/* Similar Items */}
-					{similarPins.length > 0 && (
-						<div className='space-y-4 pt-4 border-t border-border'>
-							<h3 className='font-display font-medium text-foreground'>
-								Similar Items
-							</h3>
-							<div className='grid grid-cols-2 gap-3 items-stretch auto-rows-fr'>
-								{similarPins.map((item) => {
-									const itemIsTradeOnly = item.listing_type === 'trade';
-									return (
-										<Link
-											key={item.id}
-											to={`/pin/${item.id}`}
-											onClick={onClose}
-											className='group rounded-lg overflow-hidden border border-border bg-card hover:shadow-md transition-shadow'>
-											<div className='relative aspect-square bg-muted'>
-												<img
-													src={item.images?.[0]}
-													alt={item.title}
-													loading='lazy'
-													className='w-full h-full object-cover'
-												/>
-												{itemIsTradeOnly && (
-													<div className='absolute top-2 left-2 px-2 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] font-medium'>
-														Trade
-													</div>
-												)}
-												<div
-													className={cn(
-														'absolute bottom-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-medium capitalize',
-														conditionStyles[item.condition] ??
-															'bg-muted text-muted-foreground',
-													)}>
-													{item.condition.replace('-', ' ')}
-												</div>
-											</div>
-											<div className='p-2 space-y-1'>
-												<p className='text-xs text-foreground line-clamp-2 group-hover:text-primary transition-colors'>
-													{item.title}
-												</p>
-												<p className='text-sm font-semibold text-primary'>
-													{itemIsTradeOnly ? 'Trade' : `$${item.price}`}
-												</p>
-												<div className='flex items-center gap-1 text-[10px] text-muted-foreground'>
-													<MapPin className='h-3 w-3' />
-													<span className='truncate'>{item.location}</span>
-												</div>
-											</div>
-										</Link>
-									);
-								})}
-							</div>
-						</div>
-					)}
 				</div>
 			</SheetContent>
 		</Sheet>
