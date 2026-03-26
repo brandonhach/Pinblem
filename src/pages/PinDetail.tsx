@@ -24,6 +24,7 @@ import { supabase } from '@/utils/supabaseClient';
 import { Pin } from '@/data/mockData';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Spinner } from '@/components/ui/spinner';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Helper to map a raw Supabase row to Pin
 const mapRow = (row): Pin => ({
@@ -38,7 +39,8 @@ const SELECT_FIELDS = `*, users (username, avatar_url, verified, rating)`;
 
 const PinDetail = () => {
 	const { id } = useParams();
-	const { toast } = useToast();
+  const { toast } = useToast();
+  const { user } = useAuth();
 	const navigate = useNavigate();
 
 	const [pin, setPin] = useState<Pin | null>(null);
@@ -50,8 +52,8 @@ const PinDetail = () => {
 	const [isTradeOpen, setIsTradeOpen] = useState(false);
 	const [isTradeLoading, setIsTradeLoading] = useState(false);
 	const [messageDrawerOpen, setMessageDrawerOpen] = useState(false);
-  const [firstMessage, setFirstMessage] = useState('');
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+	const [firstMessage, setFirstMessage] = useState('');
+	const [selectedImage, setSelectedImage] = useState<string | null>(null);
 	const [lightboxOpen, setLightboxOpen] = useState(false);
 
 	// ── Fetch pin + related data ──────────────────────────────────────────────
@@ -107,14 +109,77 @@ const PinDetail = () => {
 	}, [id]);
 
 	// ── Handlers ──────────────────────────────────────────────────────────────
-	const handleSendFirstMessage = () => {
-		if (!firstMessage.trim() || !pin) return;
-		toast({
-			title: 'Message sent!',
-			description: `Your message to ${pin.username} has been sent.`,
+	// Replace handleSendFirstMessage in PinDetail.tsx with this:
+
+	const handleSendFirstMessage = async () => {
+		if (!firstMessage.trim() || !pin || !user) return;
+
+		// 1. Check if a conversation already exists between these two users for this pin
+    const { data: existing, error: existingError } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('buyer_id', user.id)
+      .eq('seller_id', pin.user_id)
+      .eq('pin_id', pin.id)
+      .maybeSingle();
+
+    if (existingError) throw existingError;
+
+    let convoId: string;
+
+    if (existing) {
+      convoId = existing.id;
+    } else {
+      const { data: newConvo, error: convoError } = await supabase
+        .from('conversations')
+        .insert({
+          buyer_id: user.id,
+          seller_id: pin.user_id,
+          pin_id: pin.id,
+          last_activity: new Date().toISOString(),
+        })
+        .select('id')
+        .single();
+
+      if (convoError || !newConvo) {
+        toast({
+          title: 'Error',
+          description: 'Could not start conversation.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      convoId = newConvo.id;
+    }
+
+		// 3. Insert the first message
+		const { error: msgError } = await supabase.from('messages').insert({
+			conversation_id: convoId,
+			sender_id: user.id,
+			content: firstMessage.trim(),
 		});
+
+		if (msgError) {
+			toast({
+				title: 'Error',
+				description: 'Could not send message.',
+				variant: 'destructive',
+			});
+			return;
+		}
+
+		// 4. Update last_activity
+		await supabase
+			.from('conversations')
+			.update({ last_activity: new Date().toISOString() })
+			.eq('id', convoId);
+
 		setMessageDrawerOpen(false);
 		setFirstMessage('');
+
+		// 5. Redirect to /messages with the conversation open
+		navigate(`/messages?convo=${convoId}`);
 	};
 
 	const handleProposeTrade = async () => {
@@ -168,7 +233,7 @@ const PinDetail = () => {
 		fair: 'bg-muted text-muted-foreground',
 	};
 
-  const primaryImage = selectedImage ?? pin.images?.[0] ?? '';
+	const primaryImage = selectedImage ?? pin.images?.[0] ?? '';
 
 	return (
 		<div className='min-h-screen bg-background'>
@@ -540,6 +605,6 @@ const PinDetail = () => {
 			</Drawer>
 		</div>
 	);
-};
+};;
 
 export default PinDetail;
