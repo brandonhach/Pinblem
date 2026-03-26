@@ -10,7 +10,7 @@ import {
 	RefreshCw,
 	ShoppingCart,
 	Send,
-  SquarePen,
+	SquarePen,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
@@ -27,7 +27,6 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/contexts/AuthContext';
 
-// Helper to map a raw Supabase row to Pin
 const mapRow = (row): Pin => ({
 	...row,
 	username: row.users?.username ?? 'Unknown',
@@ -40,8 +39,8 @@ const SELECT_FIELDS = `*, users (username, avatar_url, verified, rating)`;
 
 const PinDetail = () => {
 	const { id } = useParams();
-  const { toast } = useToast();
-  const { user } = useAuth();
+	const { toast } = useToast();
+	const { user } = useAuth();
 	const navigate = useNavigate();
 
 	const [pin, setPin] = useState<Pin | null>(null);
@@ -57,7 +56,6 @@ const PinDetail = () => {
 	const [selectedImage, setSelectedImage] = useState<string | null>(null);
 	const [lightboxOpen, setLightboxOpen] = useState(false);
 
-	// ── Fetch pin + related data ──────────────────────────────────────────────
 	useEffect(() => {
 		if (!id) return;
 
@@ -65,7 +63,6 @@ const PinDetail = () => {
 			setLoading(true);
 			setNotFound(false);
 
-			// Main pin
 			const { data, error } = await supabase
 				.from('pins')
 				.select(SELECT_FIELDS)
@@ -83,7 +80,6 @@ const PinDetail = () => {
 			setPin(mapped);
 			setLiked(mapped.isFavorite ?? false);
 
-			// Similar pins (same category, different id)
 			const { data: similar } = await supabase
 				.from('pins')
 				.select(SELECT_FIELDS)
@@ -93,7 +89,6 @@ const PinDetail = () => {
 
 			setSimilarPins((similar ?? []).map(mapRow));
 
-			// More from seller
 			const { data: fromSeller } = await supabase
 				.from('pins')
 				.select(SELECT_FIELDS)
@@ -109,52 +104,47 @@ const PinDetail = () => {
 		fetchAll();
 	}, [id]);
 
-	// ── Handlers ──────────────────────────────────────────────────────────────
-	// Replace handleSendFirstMessage in PinDetail.tsx with this:
-
 	const handleSendFirstMessage = async () => {
 		if (!firstMessage.trim() || !pin || !user) return;
 
-		// 1. Check if a conversation already exists between these two users for this pin
-    const { data: existing, error: existingError } = await supabase
-      .from('conversations')
-      .select('id')
-      .eq('buyer_id', user.id)
-      .eq('seller_id', pin.user_id)
-      .eq('pin_id', pin.id)
-      .maybeSingle();
+		const { data: existing, error: existingError } = await supabase
+			.from('conversations')
+			.select('id')
+			.eq('buyer_id', user.id)
+			.eq('seller_id', pin.user_id)
+			.eq('pin_id', pin.id)
+			.maybeSingle();
 
-    if (existingError) throw existingError;
+		if (existingError) throw existingError;
 
-    let convoId: string;
+		let convoId: string;
 
-    if (existing) {
-      convoId = existing.id;
-    } else {
-      const { data: newConvo, error: convoError } = await supabase
-        .from('conversations')
-        .insert({
-          buyer_id: user.id,
-          seller_id: pin.user_id,
-          pin_id: pin.id,
-          last_activity: new Date().toISOString(),
-        })
-        .select('id')
-        .single();
+		if (existing) {
+			convoId = existing.id;
+		} else {
+			const { data: newConvo, error: convoError } = await supabase
+				.from('conversations')
+				.insert({
+					buyer_id: user.id,
+					seller_id: pin.user_id,
+					pin_id: pin.id,
+					last_activity: new Date().toISOString(),
+				})
+				.select('id')
+				.single();
 
-      if (convoError || !newConvo) {
-        toast({
-          title: 'Error',
-          description: 'Could not start conversation.',
-          variant: 'destructive',
-        });
-        return;
-      }
+			if (convoError || !newConvo) {
+				toast({
+					title: 'Error',
+					description: 'Could not start conversation.',
+					variant: 'destructive',
+				});
+				return;
+			}
 
-      convoId = newConvo.id;
-    }
+			convoId = newConvo.id;
+		}
 
-		// 3. Insert the first message
 		const { error: msgError } = await supabase.from('messages').insert({
 			conversation_id: convoId,
 			sender_id: user.id,
@@ -170,7 +160,6 @@ const PinDetail = () => {
 			return;
 		}
 
-		// 4. Update last_activity
 		await supabase
 			.from('conversations')
 			.update({ last_activity: new Date().toISOString() })
@@ -179,7 +168,6 @@ const PinDetail = () => {
 		setMessageDrawerOpen(false);
 		setFirstMessage('');
 
-		// 5. Redirect to /messages with the conversation open
 		navigate(`/messages?convo=${convoId}`);
 	};
 
@@ -198,7 +186,6 @@ const PinDetail = () => {
 		});
 	};
 
-	// ── Loading / error states ────────────────────────────────────────────────
 	if (loading) {
 		return (
 			<div className='min-h-screen bg-background'>
@@ -226,7 +213,6 @@ const PinDetail = () => {
 		);
 	}
 
-	// ── Helpers ───────────────────────────────────────────────────────────────
 	const conditionStyles: Record<string, string> = {
 		new: 'bg-success-light text-success',
 		'like-new': 'bg-accent text-accent-foreground',
@@ -237,11 +223,12 @@ const PinDetail = () => {
 	const primaryImage = selectedImage ?? pin.images?.[0] ?? '';
 
 	return (
-		<div className='min-h-screen bg-background'>
+		// overflow-x-hidden on the root prevents any child from expanding the viewport horizontally
+		<div className='min-h-screen w-full max-w-full overflow-x-hidden bg-background'>
 			<Navbar />
 
 			{/* Back Button */}
-			<div className='container px-4 py-3'>
+			<div className='w-full px-4 py-3'>
 				<Link to='/'>
 					<Button
 						variant='ghost'
@@ -253,14 +240,15 @@ const PinDetail = () => {
 				</Link>
 			</div>
 
-			<main className='container px-4 pb-6'>
+			<main className='w-full px-4 pb-6'>
 				<div className='max-w-4xl mx-auto'>
 					<div className='grid md:grid-cols-2 gap-6'>
 						{/* ── Image Section ── */}
-						<div className='space-y-3'>
+						{/* min-w-0 is critical on grid children — without it, they can overflow their grid cell */}
+						<div className='w-full min-w-0 space-y-3'>
 							{/* Main image */}
 							<div
-								className='relative aspect-square bg-muted rounded-xl overflow-hidden cursor-zoom-in'
+								className='relative w-full aspect-square max-h-[70vh] bg-muted rounded-xl overflow-hidden cursor-zoom-in'
 								onClick={() => primaryImage && setLightboxOpen(true)}>
 								{primaryImage ? (
 									<img
@@ -354,14 +342,17 @@ const PinDetail = () => {
 						)}
 
 						{/* ── Details Section ── */}
-						<div className='space-y-4'>
+						{/* min-w-0 here too — flex/grid children default to min-width: auto which causes overflow */}
+						<div className='w-full min-w-0 space-y-4'>
 							<div>
 								<h1 className='font-display text-xl md:text-2xl font-bold text-foreground'>
 									{pin.title}
 								</h1>
 								<div className='flex items-center gap-2 mt-2'>
 									<span className='text-2xl font-bold text-primary'>
-										{pin.isTradeOnly ? 'Trade Only' : `$${pin.price}`}
+										{pin.listing_type === 'trade'
+											? 'Trade Only'
+											: `$${pin.price}`}
 									</span>
 									<span className='px-2.5 py-1 rounded-full border border-border text-xs font-medium capitalize text-foreground'>
 										{pin.listing_type}
@@ -370,8 +361,8 @@ const PinDetail = () => {
 							</div>
 
 							<div className='flex items-center gap-2 text-sm text-muted-foreground'>
-								<MapPin className='h-4 w-4' />
-								<span>{pin.location}</span>
+								<MapPin className='h-4 w-4 shrink-0' />
+								<span className='truncate'>{pin.location}</span>
 							</div>
 
 							{/* Seller Card */}
@@ -379,19 +370,19 @@ const PinDetail = () => {
 								to={`/profile/${pin.user_id}`}
 								className='block card-tactile p-4'>
 								<div className='flex items-center gap-3'>
-									<Avatar className='size-12'>
+									<Avatar className='size-12 shrink-0'>
 										<AvatarImage src={pin.avatar_url} />
 										<AvatarFallback>
 											<Spinner className='size-4' />
 										</AvatarFallback>
 									</Avatar>
-									<div className='flex-1'>
+									<div className='flex-1 min-w-0'>
 										<div className='flex items-center gap-2'>
-											<span className='font-medium text-foreground'>
+											<span className='font-medium text-foreground truncate'>
 												{pin.username}
 											</span>
 											{pin.verified && (
-												<span className='group/badge relative'>
+												<span className='group/badge relative shrink-0'>
 													<Shield className='h-4 w-4 text-primary' />
 													<span className='absolute -top-7 left-1/2 -translate-x-1/2 bg-foreground text-background text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover/badge:opacity-100 transition-opacity whitespace-nowrap pointer-events-none'>
 														Verified
@@ -399,11 +390,13 @@ const PinDetail = () => {
 												</span>
 											)}
 										</div>
-										<div className='flex items-center gap-1 mt-1'>
+										<div className='flex items-center gap-1 mt-1 min-w-0'>
 											{pin.rating && (
-												<div className='flex items-center gap-1 text-sm text-muted-foreground'>
-													<Star className='h-3.5 w-3.5 fill-warning text-warning' />
-													<span>{pin.rating} (156)&emsp;·&emsp;456 sales</span>
+												<div className='flex items-center gap-1 text-sm text-muted-foreground min-w-0'>
+													<Star className='h-3.5 w-3.5 fill-warning text-warning shrink-0' />
+													<span className='truncate'>
+														{pin.rating} (156) · 456 sales
+													</span>
 												</div>
 											)}
 										</div>
@@ -416,25 +409,23 @@ const PinDetail = () => {
 								<h3 className='font-display font-semibold text-foreground mb-2'>
 									Description
 								</h3>
-								<p className='text-sm text-muted-foreground'>
+								<p className='text-sm text-muted-foreground break-words'>
 									{pin.description}
 								</p>
 							</div>
 
 							{/* Action Buttons */}
 							{user.id === pin.user_id ? (
-								<>
-									<Button
-										variant='default'
-										className='w-full gap-2'
-										onClick={() => setMessageDrawerOpen(true)}>
-										<SquarePen className="size-4"/>
-										Edit listing
-									</Button>
-								</>
+								<Button
+									variant='default'
+									className='w-full gap-2'
+									onClick={() => setMessageDrawerOpen(true)}>
+									<SquarePen className='size-4' />
+									Edit listing
+								</Button>
 							) : (
 								<>
-									<div className='flex gap-3 pt-4'>
+									<div className='flex gap-2 pt-4'>
 										{pin.isTradeOnly ? (
 											<Button
 												className='flex-1 gap-2'
@@ -462,14 +453,11 @@ const PinDetail = () => {
 												</Button>
 												<Button
 													variant='outline'
-													className='gap-2'
+													className='flex-1 gap-2'
 													onClick={handleProposeTrade}
 													disabled={isTradeLoading}>
 													{isTradeLoading ? (
-														<>
-															<span className='h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent' />
-															Loading…
-														</>
+														<span className='h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent' />
 													) : (
 														<>
 															<RefreshCw className='h-4 w-4' />
@@ -499,7 +487,7 @@ const PinDetail = () => {
 							<h2 className='font-display text-lg font-semibold text-foreground mb-4'>
 								Similar Items
 							</h2>
-							<div className='grid grid-cols-2 md:grid-cols-4 gap-4 items-stretch auto-rows-fr'>
+							<div className='grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 items-stretch auto-rows-fr'>
 								{similarPins.map((p) => (
 									<ListingCard
 										key={p.id}
@@ -527,7 +515,7 @@ const PinDetail = () => {
 									</Button>
 								</Link>
 							</div>
-							<div className='grid grid-cols-2 md:grid-cols-4 gap-4 items-stretch auto-rows-fr'>
+							<div className='grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 items-stretch auto-rows-fr'>
 								{sellerPins.map((p) => (
 									<ListingCard
 										key={p.id}
@@ -568,11 +556,11 @@ const PinDetail = () => {
 								</div>
 							)}
 							<div className='flex-1 min-w-0'>
-								<div className='font-medium text-foreground text-sm'>
+								<div className='font-medium text-foreground text-sm truncate'>
 									{pin.username}
 								</div>
 								<div className='flex items-center gap-1.5 mt-0.5'>
-									<span className='relative flex h-2.5 w-2.5'>
+									<span className='relative flex h-2.5 w-2.5 shrink-0'>
 										<span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75' />
 										<span className='relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500' />
 									</span>
@@ -620,6 +608,6 @@ const PinDetail = () => {
 			</Drawer>
 		</div>
 	);
-};;
+};
 
 export default PinDetail;
