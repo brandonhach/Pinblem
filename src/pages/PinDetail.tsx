@@ -56,6 +56,15 @@ const PinDetail = () => {
 	const [selectedImage, setSelectedImage] = useState<string | null>(null);
 	const [lightboxOpen, setLightboxOpen] = useState(false);
 
+	// Redirects to /login if user is not authenticated, returns false to halt the caller
+	const requireAuth = (): boolean => {
+		if (!user) {
+			navigate('/login');
+			return false;
+		}
+		return true;
+	};
+
 	useEffect(() => {
 		if (!id) return;
 
@@ -105,6 +114,7 @@ const PinDetail = () => {
 	}, [id]);
 
 	const handleSendFirstMessage = async () => {
+		if (!requireAuth()) return;
 		if (!firstMessage.trim() || !pin || !user) return;
 
 		const { data: existing, error: existingError } = await supabase
@@ -172,6 +182,7 @@ const PinDetail = () => {
 	};
 
 	const handleProposeTrade = async () => {
+		if (!requireAuth()) return;
 		setIsTradeLoading(true);
 		await new Promise((r) => setTimeout(r, 800));
 		setIsTradeLoading(false);
@@ -179,11 +190,22 @@ const PinDetail = () => {
 	};
 
 	const handleBuyNow = () => {
+		if (!requireAuth()) return;
 		if (!pin) return;
 		toast({
 			title: 'Order placed!',
 			description: `You bought "${pin.title}" for $${pin.price}.`,
 		});
+	};
+
+	const handleLike = () => {
+		if (!requireAuth()) return;
+		setLiked(!liked);
+	};
+
+	const handleMessageSeller = () => {
+		if (!requireAuth()) return;
+		setMessageDrawerOpen(true);
 	};
 
 	if (loading) {
@@ -221,9 +243,9 @@ const PinDetail = () => {
 	};
 
 	const primaryImage = selectedImage ?? pin.images?.[0] ?? '';
+	const isOwner = user?.id === pin.user_id;
 
 	return (
-		// overflow-x-hidden on the root prevents any child from expanding the viewport horizontally
 		<div className='min-h-screen w-full max-w-full overflow-x-hidden bg-background'>
 			<Navbar />
 
@@ -244,7 +266,6 @@ const PinDetail = () => {
 				<div className='max-w-4xl mx-auto'>
 					<div className='grid md:grid-cols-2 gap-6'>
 						{/* ── Image Section ── */}
-						{/* min-w-0 is critical on grid children — without it, they can overflow their grid cell */}
 						<div className='w-full min-w-0 space-y-3'>
 							{/* Main image */}
 							<div
@@ -268,7 +289,7 @@ const PinDetail = () => {
 										className='w-9 h-9 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center hover:bg-card transition-colors'
 										onClick={(e) => {
 											e.stopPropagation();
-											setLiked(!liked);
+											handleLike();
 										}}>
 										<Heart
 											className={cn(
@@ -342,7 +363,6 @@ const PinDetail = () => {
 						)}
 
 						{/* ── Details Section ── */}
-						{/* min-w-0 here too — flex/grid children default to min-width: auto which causes overflow */}
 						<div className='w-full min-w-0 space-y-4'>
 							<div>
 								<h1 className='font-display text-xl md:text-2xl font-bold text-foreground'>
@@ -415,7 +435,7 @@ const PinDetail = () => {
 							</div>
 
 							{/* Action Buttons */}
-							{user.id === pin.user_id ? (
+							{isOwner ? (
 								<Button
 									variant='default'
 									className='w-full gap-2'
@@ -472,7 +492,7 @@ const PinDetail = () => {
 									<Button
 										variant='ghost'
 										className='w-full gap-2'
-										onClick={() => setMessageDrawerOpen(true)}>
+										onClick={handleMessageSeller}>
 										<MessageCircle className='h-4 w-4' />
 										Message Seller
 									</Button>
@@ -583,7 +603,9 @@ const PinDetail = () => {
 									{pin.title}
 								</div>
 								<div className='text-xs text-primary font-semibold'>
-									{pin.listing_type === 'trade' ? 'Trade Only' : `$${pin.price}`}
+									{pin.listing_type === 'trade'
+										? 'Trade Only'
+										: `$${pin.price}`}
 								</div>
 							</div>
 						</div>
