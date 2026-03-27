@@ -18,6 +18,7 @@ import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AuthCallback from "./pages/AuthCallback";
+import { FavoritesProvider } from "./contexts/FavoritesContext";
 
 const queryClient = new QueryClient();
 
@@ -28,92 +29,95 @@ const App = () => (
 			<Sonner />
 			<BrowserRouter>
 				<AuthProvider>
-					<Routes>
-						<Route
-							path='/auth/callback'
-							element={<AuthCallback />}
-						/>
-						<Route
-							path='/'
-							element={<Index />}
-						/>
-						<Route
-							path='/search'
-							element={<Search />}
-						/>
-						<Route
-							path='/profile/:id'
-							element={<Profile />}
-						/>
-						<Route
-							path='/pin/:id'
-							element={<PinDetail />}
-						/>
+					{' '}
+					<FavoritesProvider>
+						<Routes>
+							<Route
+								path='/auth/callback'
+								element={<AuthCallback />}
+							/>
+							<Route
+								path='/'
+								element={<Index />}
+							/>
+							<Route
+								path='/search'
+								element={<Search />}
+							/>
+							<Route
+								path='/profile/:id'
+								element={<Profile />}
+							/>
+							<Route
+								path='/pin/:id'
+								element={<PinDetail />}
+							/>
 
-						{/* Protected routes */}
-						<Route
-							path='/create'
-							element={
-								<ProtectedRoute>
-									<CreateListing />
-								</ProtectedRoute>
-							}
-						/>
+							{/* Protected routes */}
+							<Route
+								path='/create'
+								element={
+									<ProtectedRoute>
+										<CreateListing />
+									</ProtectedRoute>
+								}
+							/>
 
-						<Route
-							path='/inbox'
-							element={
-								<ProtectedRoute>
-									<Inbox />
-								</ProtectedRoute>
-							}
-						/>
+							<Route
+								path='/inbox'
+								element={
+									<ProtectedRoute>
+										<Inbox />
+									</ProtectedRoute>
+								}
+							/>
 
-						<Route
-							path='/my-listings'
-							element={
-								<ProtectedRoute>
-									<MyListings />
-								</ProtectedRoute>
-							}
-						/>
+							<Route
+								path='/my-listings'
+								element={
+									<ProtectedRoute>
+										<MyListings />
+									</ProtectedRoute>
+								}
+							/>
 
-						<Route
-							path='/saved'
-							element={
-								<ProtectedRoute>
-									<SavedItems />
-								</ProtectedRoute>
-							}
-						/>
+							<Route
+								path='/saved'
+								element={
+									<ProtectedRoute>
+										<SavedItems />
+									</ProtectedRoute>
+								}
+							/>
 
-						<Route
-							path='/settings'
-							element={
-								<ProtectedRoute>
-									<Settings />
-								</ProtectedRoute>
-							}
-						/>
+							<Route
+								path='/settings'
+								element={
+									<ProtectedRoute>
+										<Settings />
+									</ProtectedRoute>
+								}
+							/>
 
-						<Route
-							path='/messages'
-							element={
-								<ProtectedRoute>
-									<Messages />
-								</ProtectedRoute>
-							}
-						/>
+							<Route
+								path='/messages'
+								element={
+									<ProtectedRoute>
+										<Messages />
+									</ProtectedRoute>
+								}
+							/>
 
-						<Route
-							path='/login'
-							element={<Login />}
-						/>
-						<Route
-							path='*'
-							element={<NotFound />}
-						/>
-					</Routes>
+							<Route
+								path='/login'
+								element={<Login />}
+							/>
+							<Route
+								path='*'
+								element={<NotFound />}
+							/>
+						</Routes>
+					</FavoritesProvider>
 				</AuthProvider>
 			</BrowserRouter>
 		</TooltipProvider>

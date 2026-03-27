@@ -7,18 +7,21 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Spinner } from './ui/spinner';
 import { supabase } from '@/utils/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
+import { useFavorites } from '@/contexts/FavoritesContext';
 import { toast } from 'sonner';
 
 interface ListingCardProps {
 	pin: Pin;
 	to?: string;
 	onClick?: () => void;
+	hideSave?: boolean;
 }
 
-const ListingCard = ({ pin, to, onClick }: ListingCardProps) => {
+const ListingCard = ({ pin, to, onClick, hideSave }: ListingCardProps) => {
 	const { user } = useAuth();
 	const navigate = useNavigate();
-	const [isSaved, setIsSaved] = useState(pin.isFavorite ?? false);
+	const { favoritedIds, toggle } = useFavorites();
+	const isSaved = favoritedIds.has(pin.id);     
 	const [savingInProgress, setSavingInProgress] = useState(false);
 	const [hovered, setHovered] = useState(false);
 
@@ -38,22 +41,19 @@ const ListingCard = ({ pin, to, onClick }: ListingCardProps) => {
 		fair: 'bg-muted text-muted-foreground',
 	};
 
-	const handleSaveClick = async (e: React.MouseEvent) => {
+  const handleSaveClick = async (e: React.MouseEvent) => {
 		e.stopPropagation();
-
 		if (!user) {
 			toast.error('Sign in to save listings');
 			return;
 		}
-
 		if (savingInProgress) return;
-		setSavingInProgress(true);
 
-		const next = !isSaved;
-		setIsSaved(next); // optimistic update
+		setSavingInProgress(true);
+		toggle(pin.id); // optimistic update via context
 
 		try {
-			if (next) {
+			if (!isSaved) {
 				const { error } = await supabase
 					.from('user_favorites')
 					.insert({ user_id: user.id, pin_id: pin.id });
@@ -67,8 +67,7 @@ const ListingCard = ({ pin, to, onClick }: ListingCardProps) => {
 				if (error) throw error;
 			}
 		} catch (err) {
-			console.error(err);
-			setIsSaved(!next); // revert on failure
+			toggle(pin.id); // revert on failure
 			toast.error('Failed to update saved listing');
 		} finally {
 			setSavingInProgress(false);
@@ -107,17 +106,19 @@ const ListingCard = ({ pin, to, onClick }: ListingCardProps) => {
 				/>
 
 				{/* Save Button */}
-				<button
-					onClick={handleSaveClick}
-					disabled={savingInProgress}
-					className={cn(
-						'absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center transition-all',
-						isSaved
-							? 'bg-destructive text-destructive-foreground'
-							: 'bg-card/90 backdrop-blur-sm text-muted-foreground hover:text-foreground',
-					)}>
-					<Heart className={cn('h-4 w-4', isSaved && 'fill-current')} />
-				</button>
+				{!hideSave && (
+					<button
+						onClick={handleSaveClick}
+						disabled={savingInProgress}
+						className={cn(
+							'absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center transition-all',
+							isSaved
+								? 'bg-destructive text-destructive-foreground'
+								: 'bg-card/90 backdrop-blur-sm text-muted-foreground hover:text-foreground',
+						)}>
+						<Heart className={cn('h-4 w-4', isSaved && 'fill-current')} />
+					</button>
+				)}
 
 				{/* Trade Badge */}
 				{isTradeOnly && (

@@ -20,6 +20,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Spinner } from './ui/spinner';
+import { useFavorites } from '@/contexts/FavoritesContext';
 
 interface ListingDrawerProps {
 	pin: Pin | null;
@@ -29,16 +30,15 @@ interface ListingDrawerProps {
 
 const ListingDrawer = ({ pin, isOpen, onClose }: ListingDrawerProps) => {
 	const { user } = useAuth();
-	const [isSaved, setIsSaved] = useState(false);
-	const [savingInProgress, setSavingInProgress] = useState(false);
+	const { favoritedIds, toggle } = useFavorites();
 	const [currentImageIndex, setCurrentImageIndex] = useState(0);
-	const [similarPins, setSimilarPins] = useState<Pin[]>([]);
+	//const [similarPins, setSimilarPins] = useState<Pin[]>([]);
+	const [savingInProgress, setSavingInProgress] = useState(false);
+	const isSaved = pin ? favoritedIds.has(pin.id) : false;
 
 	// Sync saved state when pin changes
 	useEffect(() => {
-		setIsSaved(pin?.isFavorite ?? false);
 		setCurrentImageIndex(0);
-		setSimilarPins([mockPins[1], mockPins[2], mockPins[3]]); // Mock similar pins for now
 	}, [pin?.id]);
 
 	// Fetch similar pins when drawer opens
@@ -88,14 +88,13 @@ const ListingDrawer = ({ pin, isOpen, onClose }: ListingDrawerProps) => {
 			toast.error('Sign in to save listings');
 			return;
 		}
-		if (savingInProgress) return;
+		if (!pin || savingInProgress) return;
 
 		setSavingInProgress(true);
-		const next = !isSaved;
-		setIsSaved(next);
+		toggle(pin.id); 
 
 		try {
-			if (next) {
+			if (!isSaved) {
 				const { error } = await supabase
 					.from('user_favorites')
 					.insert({ user_id: user.id, pin_id: pin.id });
@@ -109,8 +108,7 @@ const ListingDrawer = ({ pin, isOpen, onClose }: ListingDrawerProps) => {
 				if (error) throw error;
 			}
 		} catch (err) {
-			console.error(err);
-			setIsSaved(!next);
+			toggle(pin.id); 
 			toast.error('Failed to update saved listing');
 		} finally {
 			setSavingInProgress(false);

@@ -26,6 +26,7 @@ import { Pin } from '@/data/mockData';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/contexts/AuthContext';
+import { useFavorites } from '@/contexts/FavoritesContext';
 
 const mapRow = (row): Pin => ({
 	...row,
@@ -41,6 +42,7 @@ const PinDetail = () => {
 	const { id } = useParams();
 	const { toast } = useToast();
 	const { user } = useAuth();
+	const { favoritedIds, toggle } = useFavorites();
 	const navigate = useNavigate();
 
 	const [pin, setPin] = useState<Pin | null>(null);
@@ -55,6 +57,7 @@ const PinDetail = () => {
 	const [firstMessage, setFirstMessage] = useState('');
 	const [selectedImage, setSelectedImage] = useState<string | null>(null);
 	const [lightboxOpen, setLightboxOpen] = useState(false);
+	const [savingInProgress, setSavingInProgress] = useState(false);
 
 	// Redirects to /login if user is not authenticated, returns false to halt the caller
 	const requireAuth = (): boolean => {
@@ -198,9 +201,39 @@ const PinDetail = () => {
 		});
 	};
 
-	const handleLike = () => {
+	const handleLike = async () => {
 		if (!requireAuth()) return;
-		setLiked(!liked);
+		if (!pin || savingInProgress) return;
+
+		setSavingInProgress(true);
+		toggle(pin.id); // optimistic
+
+		try {
+			const isSaved = favoritedIds.has(pin.id);
+			if (!isSaved) {
+				// was not saved before toggle, so we're adding
+				const { error } = await supabase
+					.from('user_favorites')
+					.insert({ user_id: user!.id, pin_id: pin.id });
+				if (error) throw error;
+			} else {
+				const { error } = await supabase
+					.from('user_favorites')
+					.delete()
+					.eq('user_id', user!.id)
+					.eq('pin_id', pin.id);
+				if (error) throw error;
+			}
+		} catch (err) {
+			toggle(pin.id); // revert
+			toast({
+				title: 'Error',
+				description: 'Failed to update saved listing.',
+				variant: 'destructive',
+			});
+		} finally {
+			setSavingInProgress(false);
+		}
 	};
 
 	const handleMessageSeller = () => {
@@ -294,7 +327,7 @@ const PinDetail = () => {
 										<Heart
 											className={cn(
 												'h-4 w-4',
-												liked
+												favoritedIds.has(pin.id)
 													? 'fill-destructive text-destructive'
 													: 'text-muted-foreground',
 											)}
