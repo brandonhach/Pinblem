@@ -33,6 +33,11 @@ import { toast } from 'sonner';
 import { supabase } from '@/utils/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 
+/**
+ * TODO:
+ * Show last bumped
+ * Make bump use conditional (premium users)
+ */
 
 const listingSchema = z.object({
 	title: z.string().min(5, 'Title must be at least 5 characters').max(100),
