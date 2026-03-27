@@ -181,7 +181,7 @@ const ListingCard = ({ pin, to, onClick }: ListingCardProps) => {
 							</span>
 						)}
 					</span>
-					{pin.rating && (
+					{pin.rating > 0 && (
 						<div className='flex items-center gap-1 text-sm text-muted-foreground'>
 							<Star className='h-3.5 w-3.5 fill-warning text-warning' />
 							<span>{pin.rating}</span>
