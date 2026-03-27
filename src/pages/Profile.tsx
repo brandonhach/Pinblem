@@ -1,63 +1,190 @@
-import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, MapPin, Calendar, Star, Shield, Clock, MessageCircle, PenLine } from "lucide-react";
-import { useEffect, useState } from "react";
-import Navbar from "@/components/Navbar";
-import ListingCard from "@/components/ListingCard";
-import ListingDrawer from "@/components/ListingDrawer";
-import { Button } from "@/components/ui/button";
-import { mockSellers, mockPins, mockReviews, type Pin } from "@/data/mockData";
-import ReviewFormDialog from "@/components/ReviewFormDialog";
-import { supabase } from "@/utils/supabaseClient";
-import { Spinner } from "@/components/ui/spinner";
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import {
+	ArrowLeft,
+	MapPin,
+	Calendar,
+	Star,
+	Shield,
+	Clock,
+	MessageCircle,
+	PenLine,
+	Send,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import Navbar from '@/components/Navbar';
+import ListingCard from '@/components/ListingCard';
+import ListingDrawer from '@/components/ListingDrawer';
+import { Button } from '@/components/ui/button';
+import { Drawer, DrawerContent } from '@/components/ui/drawer';
+import { Textarea } from '@/components/ui/textarea';
+import { type Pin, mockReviews } from '@/data/mockData';
+import ReviewFormDialog from '@/components/ReviewFormDialog';
+import { supabase } from '@/utils/supabaseClient';
+import { Spinner } from '@/components/ui/spinner';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { set } from "date-fns";
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+
+const SELECT_FIELDS = `*, users (username, avatar_url, verified, rating)`;
+
+const mapRow = (row): Pin => ({
+	...row,
+	username: row.users?.username ?? 'Unknown',
+	avatar_url: row.users?.avatar_url ?? '',
+	verified: row.users?.verified ?? false,
+	rating: row.users?.rating ?? 0,
+});
+
+interface UserProfile {
+	id: string;
+	username: string;
+	avatar_url: string;
+	verified: boolean;
+	location: string;
+	bio: string;
+	created_at: string;
+	response_time: string;
+	rating: number;
+	total_reviews: number;
+	total_sales: number;
+}
 
 const Profile = () => {
-  const { id } = useParams();
-  const sellerId = parseInt(id || "1");
-  
-  const seller = mockSellers.find(s => s.id === sellerId) || mockSellers[0];
-  const sellerPins = mockPins.filter(p => p.sellerId === sellerId);
-  const [selectedPin, setSelectedPin] = useState<Pin | null>(null);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [isReviewOpen, setIsReviewOpen] = useState(false);
-  const [profile, setProfile] = useState(null);
-  const [error, setError] = useState<string | null>(null);
+	const { id } = useParams();
+	const navigate = useNavigate();
+	const { user } = useAuth();
 
-  const renderStars = (rating: number) => {
-    return Array.from({ length: 5 }, (_, i) => (
-      <Star
-        key={i}
-        className={`h-4 w-4 ${i < Math.floor(rating) ? 'fill-warning text-warning' : 'text-muted-foreground'}`}
-      />
-    ));
-  };
+	const [profile, setProfile] = useState<UserProfile | null>(null);
+	const [sellerPins, setSellerPins] = useState<Pin[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
 
-  const handleCardClick = (pin: Pin) => {
-    setSelectedPin(pin);
-    setIsDrawerOpen(true);
-  };
+	const [selectedPin, setSelectedPin] = useState<Pin | null>(null);
+	const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+	const [isReviewOpen, setIsReviewOpen] = useState(false);
 
-  useEffect(() => {
-      const loadProfile = async () => {
-        const { data, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', id)
-          .single();
-  
-        if (error) {
-          setError('This user may not exist or there was an error loading the profile.');  
-        } else {
-          setProfile(data);
-        }
-      };
-  
-      loadProfile();
-  }, [id]);
-  
-  if (error) {
-    return (
+	// Message drawer
+	const [messageDrawerOpen, setMessageDrawerOpen] = useState(false);
+	const [firstMessage, setFirstMessage] = useState('');
+
+	const isOwnProfile = user?.id === id;
+
+	// Fetch profile + listings 
+	useEffect(() => {
+		if (!id) return;
+
+		const load = async () => {
+			setLoading(true);
+			setError(null);
+
+			const { data: profileData, error: profileError } = await supabase
+				.from('users')
+				.select('*')
+				.eq('id', id)
+				.single();
+
+			if (profileError || !profileData) {
+				setError(
+					'This user may not exist or there was an error loading the profile.',
+				);
+				setLoading(false);
+				return;
+			}
+
+			setProfile(profileData);
+
+			const { data: pinsData } = await supabase
+				.from('pins')
+				.select(SELECT_FIELDS)
+				.eq('user_id', id)
+				.order('created_at', { ascending: false });
+
+			setSellerPins((pinsData ?? []).map(mapRow));
+			setLoading(false);
+		};
+
+		load();
+	}, [id]);
+
+	
+	const handleSendFirstMessage = async () => {
+		if (!user) {
+			navigate('/login');
+			return;
+		}
+		if (!firstMessage.trim() || !profile) return;
+
+		try {
+			const { data: existing } = await supabase
+				.from('conversations')
+				.select('id')
+				.eq('buyer_id', user.id)
+				.eq('seller_id', profile.id)
+				.is('pin_id', null)
+				.maybeSingle();
+
+			let convoId: string;
+
+			if (existing) {
+				convoId = existing.id;
+			} else {
+				const { data: newConvo, error: convoError } = await supabase
+					.from('conversations')
+					.insert({
+						buyer_id: user.id,
+						seller_id: profile.id,
+						last_activity: new Date().toISOString(),
+					})
+					.select('id')
+					.single();
+
+				if (convoError || !newConvo) {
+					toast.error('Could not start conversation.');
+					return;
+				}
+				convoId = newConvo.id;
+			}
+
+			const { error: msgError } = await supabase.from('messages').insert({
+				conversation_id: convoId,
+				sender_id: user.id,
+				content: firstMessage.trim(),
+			});
+
+			if (msgError) {
+				toast.error('Could not send message.');
+				return;
+			}
+
+			await supabase
+				.from('conversations')
+				.update({ last_activity: new Date().toISOString() })
+				.eq('id', convoId);
+
+			setMessageDrawerOpen(false);
+			setFirstMessage('');
+			navigate(`/messages?convo=${convoId}`);
+		} catch (err) {
+			console.error(err);
+			toast.error('Something went wrong.');
+		}
+	};
+
+	const renderStars = (rating: number) =>
+		Array.from({ length: 5 }, (_, i) => (
+			<Star
+				key={i}
+				className={`h-4 w-4 ${
+					i < Math.floor(rating)
+						? 'fill-warning text-warning'
+						: 'text-muted-foreground'
+				}`}
+			/>
+		));
+
+	
+	if (loading) {
+		return (
 			<div className='min-h-screen bg-background'>
 				<Navbar />
 				<div className='container px-4 py-3'>
@@ -71,13 +198,15 @@ const Profile = () => {
 						</Button>
 					</Link>
 				</div>
-				<div className='container px-4 py-3'>{error}</div>
+				<div className='container px-4 py-12 flex justify-center'>
+					<Spinner className='size-6' />
+				</div>
 			</div>
 		);
 	}
 
-  if (!profile) {
-    return (
+	if (error || !profile) {
+		return (
 			<div className='min-h-screen bg-background'>
 				<Navbar />
 				<div className='container px-4 py-3'>
@@ -91,17 +220,17 @@ const Profile = () => {
 						</Button>
 					</Link>
 				</div>
-				<div className='container px-4 py-3'>
-					<Spinner className='mx-auto' />
+				<div className='container px-4 py-3 text-muted-foreground text-sm'>
+					{error ?? 'Profile not found.'}
 				</div>
 			</div>
 		);
-  }
-  return (
+	}
+
+	return (
 		<div className='min-h-screen bg-background'>
 			<Navbar />
 
-			{/* Back Button */}
 			<div className='container px-4 py-3'>
 				<Link to='/'>
 					<Button
@@ -114,14 +243,13 @@ const Profile = () => {
 				</Link>
 			</div>
 
-			{/* Profile Header */}
+			{/*  Profile Header  */}
 			<section className='px-4 pb-6'>
 				<div className='container max-w-4xl'>
 					<div className='card-tactile p-6'>
-						{/* Avatar & Basic Info */}
 						<div className='flex items-start gap-4'>
 							<Avatar className='size-24'>
-								<AvatarImage src={profile?.avatar_url} />
+								<AvatarImage src={profile.avatar_url} />
 								<AvatarFallback>
 									<Spinner className='size-4' />
 								</AvatarFallback>
@@ -139,23 +267,23 @@ const Profile = () => {
 									)}
 								</div>
 
-								{/* Rating */}
 								<div className='flex items-center gap-2 mt-1'>
-									<div className='flex'>{renderStars(seller.rating)}</div>
+									<div className='flex'>{renderStars(profile.rating ?? 0)}</div>
 									<span className='text-sm font-medium text-foreground'>
-										{seller.rating}
+										{profile.rating ?? '—'}
 									</span>
-									<span className='text-sm text-muted-foreground'>
-										({seller.totalReviews} reviews)
+									<span className='text-xs text-muted-foreground'>
+										({profile.total_reviews ?? 0} reviews)
 									</span>
 								</div>
 
-								{/* Location & Join Date */}
 								<div className='flex flex-wrap gap-3 mt-2 text-sm text-muted-foreground'>
-									<span className='flex items-center gap-1'>
-										<MapPin className='h-3 w-3' />
-										{profile.location}
-									</span>
+									{profile.location && (
+										<span className='flex items-center gap-1'>
+											<MapPin className='h-3 w-3' />
+											{profile.location}
+										</span>
+									)}
 									<span className='flex items-center gap-1'>
 										<Calendar className='h-3 w-3' />
 										Joined {profile.created_at.split('T')[0]}
@@ -164,59 +292,72 @@ const Profile = () => {
 							</div>
 						</div>
 
-						{/* Bio */}
-						<p className='text-sm text-muted-foreground mt-4'>{profile.bio}</p>
+						{profile.bio && (
+							<p className='text-sm text-muted-foreground mt-4'>
+								{profile.bio}
+							</p>
+						)}
 
-						{/* Stats */}
 						<div className='grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-border'>
 							<div className='text-center'>
 								<div className='text-2xl font-bold text-foreground'>
-									{seller.totalSales}
+									{profile.total_sales ?? 0}
 								</div>
 								<div className='text-xs text-muted-foreground'>Sales</div>
 							</div>
 							<div className='text-center'>
 								<div className='text-2xl font-bold text-foreground'>
-									{seller.totalReviews}
+									{profile.total_reviews ?? 0}
 								</div>
 								<div className='text-xs text-muted-foreground'>Reviews</div>
 							</div>
 							<div className='text-center'>
 								<div className='text-2xl font-bold text-foreground'>
-									{seller.rating}
+									{profile.rating ?? '—'}
 								</div>
 								<div className='text-xs text-muted-foreground'>Rating</div>
 							</div>
 						</div>
 
-						{/* Response Time & Contact */}
 						<div className='flex flex-col sm:flex-row gap-3 mt-4 pt-4 border-t border-border'>
-							<div className='flex items-center gap-2 text-sm text-muted-foreground'>
-								<Clock className='h-4 w-4' />
-								{profile.response_time}
-							</div>
-							<div className='flex gap-2 sm:ml-auto'>
-								<Button
-									size='sm'
-									variant='outline'
-									className='gap-2'
-									onClick={() => setIsReviewOpen(true)}>
-									<PenLine className='h-4 w-4' />
-									Write Review
-								</Button>
-								<Button
-									size='sm'
-									className='gap-2'>
-									<MessageCircle className='h-4 w-4' />
-									Message Seller
-								</Button>
-							</div>
+							{profile.response_time && (
+								<div className='flex items-center gap-2 text-sm text-muted-foreground'>
+									<Clock className='h-4 w-4' />
+									Typical response time:&nbsp;
+									{profile.response_time} hrs
+								</div>
+							)}
+							{!isOwnProfile && (
+								<div className='flex gap-2 sm:ml-auto'>
+									<Button
+										size='sm'
+										variant='outline'
+										className='gap-2'
+										onClick={() => setIsReviewOpen(true)}>
+										<PenLine className='h-4 w-4' />
+										Write Review
+									</Button>
+									<Button
+										size='sm'
+										className='gap-2'
+										onClick={() => {
+											if (!user) {
+												navigate('/login');
+												return;
+											}
+											setMessageDrawerOpen(true);
+										}}>
+										<MessageCircle className='h-4 w-4' />
+										Message
+									</Button>
+								</div>
+							)}
 						</div>
 					</div>
 				</div>
 			</section>
 
-			{/* Reviews Section */}
+			{/*  Reviews (mock)  */}
 			<section className='px-4 pb-6'>
 				<div className='container max-w-4xl'>
 					<h2 className='font-display text-lg font-semibold text-foreground mb-4'>
@@ -260,11 +401,11 @@ const Profile = () => {
 				</div>
 			</section>
 
-			{/* Seller's Listings */}
+			{/*  Listings  */}
 			<section className='px-4 pb-6'>
 				<div className='container max-w-4xl'>
 					<h2 className='font-display text-lg font-semibold text-foreground mb-4'>
-						{seller.username}'s Listings ({sellerPins.length})
+						{profile.username}'s Listings ({sellerPins.length})
 					</h2>
 					{sellerPins.length > 0 ? (
 						<div className='grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4'>
@@ -272,7 +413,10 @@ const Profile = () => {
 								<ListingCard
 									key={pin.id}
 									pin={pin}
-									onClick={() => handleCardClick(pin)}
+									onClick={() => {
+										setSelectedPin(pin);
+										setIsDrawerOpen(true);
+									}}
 								/>
 							))}
 						</div>
@@ -284,17 +428,71 @@ const Profile = () => {
 				</div>
 			</section>
 
+			{/*  Listing Drawer  */}
 			<ListingDrawer
 				pin={selectedPin}
 				isOpen={isDrawerOpen}
 				onClose={() => setIsDrawerOpen(false)}
 			/>
 
+			{/*  Review Dialog  */}
 			<ReviewFormDialog
 				open={isReviewOpen}
 				onOpenChange={setIsReviewOpen}
-				sellerName={seller.username}
+				sellerName={profile.username}
 			/>
+
+			{/*  Message Drawer  */}
+			<Drawer
+				open={messageDrawerOpen}
+				onOpenChange={setMessageDrawerOpen}>
+				<DrawerContent>
+					<div className='p-5 pb-8 max-w-lg mx-auto w-full'>
+						{/* Seller header */}
+						<div className='flex items-center gap-3 mb-4 p-3 rounded-xl bg-muted/60'>
+							{profile.avatar_url ? (
+								<img
+									src={profile.avatar_url}
+									alt={profile.username}
+									className='w-11 h-11 rounded-full object-cover shrink-0'
+								/>
+							) : (
+								<div className='w-11 h-11 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-lg shrink-0'>
+									{profile.username?.[0]?.toUpperCase() ?? '?'}
+								</div>
+							)}
+							<div className='flex-1 min-w-0'>
+								<div className='font-medium text-foreground text-sm truncate'>
+									{profile.username}
+								</div>
+								<div className='flex items-center gap-1.5 mt-0.5'>
+									<span className='relative flex h-2.5 w-2.5 shrink-0'>
+										<span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75' />
+										<span className='relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500' />
+									</span>
+									<span className='text-xs text-muted-foreground'>Active</span>
+								</div>
+							</div>
+						</div>
+
+						{/* Message input */}
+						<Textarea
+							placeholder={`Hi ${profile.username}, I wanted to reach out...`}
+							value={firstMessage}
+							onChange={(e) => setFirstMessage(e.target.value)}
+							className='min-h-[100px] mb-3 resize-none'
+							autoFocus
+						/>
+						<Button
+							onClick={handleSendFirstMessage}
+							disabled={!firstMessage.trim()}
+							className='w-full gap-2'>
+							<Send className='h-4 w-4' />
+							Send Message
+						</Button>
+					</div>
+				</DrawerContent>
+			</Drawer>
 		</div>
 	);
 };
