@@ -33,7 +33,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/utils/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 
-// ── Schema (mirrors CreateListing) ──────────────────────────────────────────
+
 const listingSchema = z.object({
 	title: z.string().min(5, 'Title must be at least 5 characters').max(100),
 	description: z
@@ -57,7 +57,7 @@ type ImageEntry =
 	| { type: 'existing'; url: string }
 	| { type: 'new'; preview: string; file: File };
 
-// ── Component ────────────────────────────────────────────────────────────────
+
 const MyListings = () => {
 	const { user } = useAuth();
 	const [listings, setListings] = useState<Pin[]>([]);
@@ -79,7 +79,6 @@ const MyListings = () => {
 
 	const listingType = watch('listingType');
 
-	// ── Fetch listings ─────────────────────────────────────────────────────────
 	useEffect(() => {
 		if (!user) return;
 		const fetchListings = async () => {
@@ -97,7 +96,7 @@ const MyListings = () => {
 		fetchListings();
 	}, [user]);
 
-	// ── Open edit drawer ───────────────────────────────────────────────────────
+
 	const openEdit = (listing: Pin) => {
 		setEditTarget(listing);
 		reset({
@@ -113,7 +112,6 @@ const MyListings = () => {
 		setDrawerOpen(true);
 	};
 
-	// ── Image helpers ──────────────────────────────────────────────────────────
 	const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
 		const files = e.target.files;
 		if (!files) return;
@@ -149,7 +147,7 @@ const MyListings = () => {
 	const getPreview = (entry: ImageEntry) =>
 		entry.type === 'existing' ? entry.url : entry.preview;
 
-	// ── Save edits ─────────────────────────────────────────────────────────────
+
 	const onSave = async (data: ListingFormData) => {
 		if (!editTarget || !user) return;
 		if (imageEntries.length === 0) {
@@ -211,7 +209,6 @@ const MyListings = () => {
 		}
 	};
 
-	// ── Bump ───────────────────────────────────────────────────────────────────
 	const handleBump = async (pinId: string) => {
 		const bumpedAt = new Date().toISOString();
 		const { error } = await supabase
@@ -236,7 +233,6 @@ const MyListings = () => {
 		toast.success('Listing bumped! 🚀');
 	};
 
-	// ── Delete ─────────────────────────────────────────────────────────────────
 	const handleDelete = async (pinId: string) => {
 		const { error } = await supabase
 			.from('pins')
@@ -267,7 +263,6 @@ const MyListings = () => {
 		fair: 'bg-muted text-muted-foreground',
 	};
 
-	// ── Render ─────────────────────────────────────────────────────────────────
 	return (
 		<div className='min-h-screen bg-background'>
 			<Navbar />
@@ -412,7 +407,7 @@ const MyListings = () => {
 					</div>
 				</main>
 
-				{/* ── Edit Drawer ───────────────────────────────────────────────────── */}
+        {/* Edit Drawer */}
 				<Drawer
 					open={drawerOpen}
 					onOpenChange={setDrawerOpen}>
