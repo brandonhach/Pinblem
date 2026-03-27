@@ -10,7 +10,7 @@ export type Pin = {
 	condition: 'new' | 'like-new' | 'good' | 'fair';
 	location: string;
 	created_at: string;
-  bumped_cat: string;
+  bumped_at: string;
   rating: number;
 	isTradeOnly: boolean;
 	verified: boolean;
