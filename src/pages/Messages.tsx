@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Send, Search } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import SignedOutGuard from '@/components/SignedOutGuard';
+import TradeOfferMessage from '@/components/TradeOfferMessage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -10,8 +11,7 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/utils/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 
-
-// ── Types ─────────────────────────────────────────────────────────────────────
+// Types ──
 
 type Participant = {
 	id: string;
@@ -25,7 +25,25 @@ type Message = {
 	sender_id: string;
 	content: string;
 	timestamp: string;
+	type: 'message';
 };
+
+type TradeOffer = {
+	id: string;
+	conversation_id: string;
+	pin_id: string;
+	name: string;
+	condition: string;
+	description: string | null;
+	photos_url: string[] | null;
+	created_at: string;
+	// We derive sender_id from the conversation (buyer always proposes)
+	sender_id: string;
+	type: 'offer';
+};
+
+// Union type for the chat feed
+type FeedItem = Message | TradeOffer;
 
 type Conversation = {
 	id: string;
@@ -45,7 +63,7 @@ type Conversation = {
 	last_message?: Message | null;
 };
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// Helpers 
 
 const formatTime = (ts: string) => {
 	const date = new Date(ts);
@@ -64,7 +82,7 @@ const formatMessageTime = (ts: string) =>
 		minute: '2-digit',
 	});
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// Component 
 
 const Messages = () => {
 	const { user } = useAuth();
@@ -73,7 +91,7 @@ const Messages = () => {
 
 	const [conversations, setConversations] = useState<Conversation[]>([]);
 	const [activeConvoId, setActiveConvoId] = useState<string | null>(null);
-	const [messages, setMessages] = useState<Message[]>([]);
+	const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
 	const [newMessage, setNewMessage] = useState('');
 	const [searchQuery, setSearchQuery] = useState('');
 	const [loadingConvos, setLoadingConvos] = useState(true);
@@ -85,7 +103,7 @@ const Messages = () => {
 
 	const activeConvo = conversations.find((c) => c.id === activeConvoId) ?? null;
 
-	// ── Fetch conversations ────────────────────────────────────────────────────
+	// Fetch conversations 
 
 	const fetchConversations = useCallback(async () => {
 		if (!user) return;
@@ -95,10 +113,10 @@ const Messages = () => {
 			.from('conversations')
 			.select(
 				`
-        *,
-        pin:pin_id (id, title, price, images, listing_type),
-        messages (id, sender_id, content, timestamp)
-      `,
+				*,
+				pin:pin_id (id, title, price, images, listing_type),
+				messages (id, sender_id, content, timestamp)
+			`,
 			)
 			.or(`buyer_id.eq.${user.id},seller_id.eq.${user.id}`)
 			.order('last_activity', { ascending: false });
@@ -109,7 +127,6 @@ const Messages = () => {
 			return;
 		}
 
-		// Gather other user IDs
 		const otherIds = (data ?? []).map((c) =>
 			c.buyer_id === user.id ? c.seller_id : c.buyer_id,
 		);
@@ -152,7 +169,6 @@ const Messages = () => {
 		setConversations(mapped);
 		setLoadingConvos(false);
 
-		// Auto-open conversation if redirected from PinDetail
 		const openId = searchParams.get('convo');
 		if (openId && mapped.find((c) => c.id === openId)) {
 			setActiveConvoId(openId);
@@ -163,29 +179,57 @@ const Messages = () => {
 		fetchConversations();
 	}, [fetchConversations]);
 
-	// ── Fetch messages for active convo ───────────────────────────────────────
+	// Fetch messages + offers and merge into feed 
 
-	const fetchMessages = useCallback(
+	const fetchFeed = useCallback(
 		async (convoId: string) => {
 			setLoadingMessages(true);
-			const { data, error } = await supabase
-				.from('messages')
-				.select('*')
-				.eq('conversation_id', convoId)
-				.order('timestamp', { ascending: true });
 
-			if (!error) setMessages(data ?? []);
+			const [{ data: msgs }, { data: offers }] = await Promise.all([
+				supabase
+					.from('messages')
+					.select('*')
+					.eq('conversation_id', convoId)
+					.order('timestamp', { ascending: true }),
+				supabase
+					.from('messages_offers')
+					.select('*')
+					.eq('conversation_id', convoId)
+					.order('created_at', { ascending: true }),
+			]);
+
+			// Find the conversation to determine who the buyer is (buyer = trade proposer)
+			const convo = conversations.find((c) => c.id === convoId);
+
+			const messageFeed: Message[] = (msgs ?? []).map((m) => ({
+				...m,
+				type: 'message' as const,
+			}));
+			const offerFeed: TradeOffer[] = (offers ?? []).map((o) => ({
+				...o,
+				sender_id: convo?.buyer_id ?? '',
+				type: 'offer' as const,
+			}));
+
+			// Merge and sort by timestamp
+			const merged: FeedItem[] = [...messageFeed, ...offerFeed].sort((a, b) => {
+				const aTime = a.type === 'message' ? a.timestamp : a.created_at;
+				const bTime = b.type === 'message' ? b.timestamp : b.created_at;
+				return new Date(aTime).getTime() - new Date(bTime).getTime();
+			});
+
+			setFeedItems(merged);
 			setLoadingMessages(false);
 		},
-		[user],
+		[conversations],
 	);
 
 	useEffect(() => {
 		if (!activeConvoId) return;
-		fetchMessages(activeConvoId);
-	}, [activeConvoId, fetchMessages]);
+		fetchFeed(activeConvoId);
+	}, [activeConvoId, fetchFeed]);
 
-	// ── Realtime subscription ─────────────────────────────────────────────────
+	// Realtime: new messages and trade offers
 
 	useEffect(() => {
 		if (!activeConvoId || !user) return;
@@ -201,12 +245,14 @@ const Messages = () => {
 					filter: `conversation_id=eq.${activeConvoId}`,
 				},
 				(payload) => {
-					const newMsg = payload.new as Message;
-					setMessages((prev) => {
+					const newMsg = {
+						...(payload.new as Message),
+						type: 'message' as const,
+					};
+					setFeedItems((prev) => {
 						if (prev.find((m) => m.id === newMsg.id)) return prev;
 						return [...prev, newMsg];
 					});
-					// Update last_message preview in sidebar
 					setConversations((prev) =>
 						prev.map((c) =>
 							c.id === activeConvoId
@@ -220,20 +266,41 @@ const Messages = () => {
 					);
 				},
 			)
+			.on(
+				'postgres_changes',
+				{
+					event: 'INSERT',
+					schema: 'public',
+					table: 'messages_offers',
+					filter: `conversation_id=eq.${activeConvoId}`,
+				},
+				(payload) => {
+					const convo = conversations.find((c) => c.id === activeConvoId);
+					const newOffer: TradeOffer = {
+						...(payload.new as any),
+						sender_id: convo?.buyer_id ?? '',
+						type: 'offer',
+					};
+					setFeedItems((prev) => {
+						if (prev.find((m) => m.id === newOffer.id)) return prev;
+						return [...prev, newOffer];
+					});
+				},
+			)
 			.subscribe();
 
 		return () => {
 			supabase.removeChannel(channel);
 		};
-	}, [activeConvoId, user]);
+	}, [activeConvoId, user, conversations]);
 
-	// ── Scroll to bottom ──────────────────────────────────────────────────────
+	// Scroll to bottom 
 
 	useEffect(() => {
 		messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-	}, [messages.length]);
+	}, [feedItems.length]);
 
-	// ── Send message ──────────────────────────────────────────────────────────
+	// Send message 
 
 	const handleSend = async () => {
 		if (!newMessage.trim() || !activeConvoId || !user || sending) return;
@@ -244,27 +311,25 @@ const Messages = () => {
 		const { error } = await supabase.from('messages').insert({
 			conversation_id: activeConvoId,
 			sender_id: user.id,
-			content
-    });
+			content,
+		});
 
 		if (!error) {
 			await supabase
 				.from('conversations')
 				.update({ last_activity: new Date().toISOString() })
 				.eq('id', activeConvoId);
-    } 
+		}
 
 		setSending(false);
 		inputRef.current?.focus();
 	};
 
-	// ── Filtered conversations ─────────────────────────────────────────────────
+	// Filtered conversations 
 
 	const filtered = conversations.filter((c) =>
 		c.other_user.username.toLowerCase().includes(searchQuery.toLowerCase()),
 	);
-
-	// ── Render ────────────────────────────────────────────────────────────────
 
 	return (
 		<div className='min-h-screen bg-background flex flex-col'>
@@ -273,7 +338,7 @@ const Messages = () => {
 				<div
 					className='flex-1 flex flex-col md:flex-row overflow-hidden'
 					style={{ height: 'calc(100vh - 64px)' }}>
-					{/* ── Conversation List ── */}
+					{/* Conversation List */}
 					<div
 						className={cn(
 							'w-full md:w-80 lg:w-96 border-r border-border bg-card flex flex-col shrink-0',
@@ -320,7 +385,7 @@ const Messages = () => {
 										</Avatar>
 										<div className='flex-1 min-w-0'>
 											<div className='flex items-center justify-between gap-2'>
-												<span>
+												<span className='font-medium text-sm text-foreground truncate'>
 													{convo.other_user.username}
 												</span>
 												<span className='text-[10px] text-muted-foreground shrink-0'>
@@ -332,14 +397,11 @@ const Messages = () => {
 													Re: {convo.pin.title}
 												</div>
 											)}
-											<div className='flex items-center justify-between gap-2 mt-0.5'>
-												<p>
-													{convo.last_message
-														? `${convo.last_message.sender_id === user?.id ? 'You: ' : ''}${convo.last_message.content}`
-														: 'No messages yet'}
-												</p>
-
-											</div>
+											<p className='text-xs text-muted-foreground truncate mt-0.5'>
+												{convo.last_message
+													? `${convo.last_message.sender_id === user?.id ? 'You: ' : ''}${convo.last_message.content}`
+													: 'No messages yet'}
+											</p>
 										</div>
 									</button>
 								))
@@ -347,7 +409,7 @@ const Messages = () => {
 						</div>
 					</div>
 
-					{/* ── Chat Area ── */}
+					{/* Chat Area */}
 					{activeConvoId && activeConvo ? (
 						<div className='flex-1 flex flex-col min-w-0 overflow-hidden'>
 							{/* Chat Header */}
@@ -410,22 +472,34 @@ const Messages = () => {
 								)}
 							</div>
 
-							{/* Messages */}
+							{/* Feed */}
 							<div className='flex-1 overflow-y-auto p-4 space-y-3'>
 								{loadingMessages ? (
 									<div className='flex items-center justify-center py-16'>
 										<span className='h-6 w-6 animate-spin rounded-full border-4 border-primary border-t-transparent' />
 									</div>
-								) : messages.length === 0 ? (
+								) : feedItems.length === 0 ? (
 									<p className='text-center text-sm text-muted-foreground py-16'>
 										No messages yet. Say hi!
 									</p>
 								) : (
-									messages.map((msg) => {
-										const isOwn = msg.sender_id === user?.id;
+									feedItems.map((item) => {
+										const isOwn = item.sender_id === user?.id;
+
+										if (item.type === 'offer') {
+											return (
+												<TradeOfferMessage
+													key={`offer-${item.id}`}
+													offer={item}
+													isOwn={isOwn}
+												/>
+											);
+										}
+
+										// Regular message
 										return (
 											<div
-												key={msg.id}
+												key={item.id}
 												className={cn(
 													'flex',
 													isOwn ? 'justify-end' : 'justify-start',
@@ -437,7 +511,7 @@ const Messages = () => {
 															? 'bg-primary text-primary-foreground rounded-br-md'
 															: 'bg-card border border-border text-foreground rounded-bl-md',
 													)}>
-													<p className='text-sm'>{msg.content}</p>
+													<p className='text-sm'>{item.content}</p>
 													<p
 														className={cn(
 															'text-[10px] mt-1',
@@ -445,7 +519,7 @@ const Messages = () => {
 																? 'text-primary-foreground/70'
 																: 'text-muted-foreground',
 														)}>
-														{formatMessageTime(msg.timestamp)}
+														{formatMessageTime(item.timestamp)}
 													</p>
 												</div>
 											</div>
