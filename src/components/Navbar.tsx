@@ -269,25 +269,7 @@ const Navbar = () => {
 							side='right'
 							className='w-80'>
 							<div className='flex flex-col gap-4 mt-6'>
-								<div className='relative'>
-									<Search className='absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground' />
-									<Input
-										type='search'
-										placeholder='Search...'
-										className='pl-10'
-									/>
-								</div>
-
 								<div className='space-y-1'>
-									<Link
-										to='/'
-										className='block'>
-										<Button
-											variant='ghost'
-											className='w-full justify-start gap-2'>
-											<Home className='h-4 w-4' /> Browse
-										</Button>
-									</Link>
 									<Link
 										to='/search'
 										className='block'>
