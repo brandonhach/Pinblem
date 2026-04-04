@@ -74,8 +74,8 @@ const Index = () => {
 
 			{/* Hero */}
 			<section className='relative overflow-hidden bg-gradient-to-br from-accent via-background to-primary/5 py-12 md:py-20'>
-				<div className='container px-4'>
-					<div className='max-w-2xl'>
+				<div className='container px-4 flex lg:flex-row flex-col items-center gap-10'>
+					<div className='max-w-2xl pr-4'>
 						<div className='inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6'>
 							<Sparkles className='h-4 w-4' />
 							<span>The premium pin marketplace</span>
@@ -107,6 +107,11 @@ const Index = () => {
 							</Link>
 						</div>
 					</div>
+					<img
+						src='/images/hero.png'
+						alt='Hero'
+						className='lg:w-[60rem] lg:h-[30rem] object-cover border rounded-xl'
+					/>				
 				</div>
 				<div className='absolute -right-20 top-1/2 -translate-y-1/2 w-96 h-96 rounded-full bg-primary/5 blur-3xl pointer-events-none' />
 				<div className='absolute -left-20 -bottom-20 w-72 h-72 rounded-full bg-accent/50 blur-3xl pointer-events-none sm:block hidden' />
