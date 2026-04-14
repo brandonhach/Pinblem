@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Send, Search } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import SignedOutGuard from '@/components/SignedOutGuard';
@@ -10,8 +10,6 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/utils/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
-
-// Types ──
 
 type Participant = {
 	id: string;
@@ -26,6 +24,7 @@ type Message = {
 	content: string;
 	timestamp: string;
 	type: 'message';
+	pending?: boolean;
 };
 
 type TradeOffer = {
@@ -37,12 +36,10 @@ type TradeOffer = {
 	description: string | null;
 	photos_url: string[] | null;
 	created_at: string;
-	// We derive sender_id from the conversation (buyer always proposes)
 	sender_id: string;
 	type: 'offer';
 };
 
-// Union type for the chat feed
 type FeedItem = Message | TradeOffer;
 
 type Conversation = {
@@ -63,7 +60,11 @@ type Conversation = {
 	last_message?: Message | null;
 };
 
-// Helpers 
+// onstants
+
+const PAGE_SIZE = 10;
+
+
 
 const formatTime = (ts: string) => {
 	const date = new Date(ts);
@@ -82,11 +83,10 @@ const formatMessageTime = (ts: string) =>
 		minute: '2-digit',
 	});
 
-// Component 
+// Component
 
 const Messages = () => {
 	const { user } = useAuth();
-	const navigate = useNavigate();
 	const [searchParams] = useSearchParams();
 
 	const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -96,122 +96,163 @@ const Messages = () => {
 	const [searchQuery, setSearchQuery] = useState('');
 	const [loadingConvos, setLoadingConvos] = useState(true);
 	const [loadingMessages, setLoadingMessages] = useState(false);
+	const [loadingOlder, setLoadingOlder] = useState(false);
+	const [hasOlderMessages, setHasOlderMessages] = useState(false);
 	const [sending, setSending] = useState(false);
 
 	const messagesEndRef = useRef<HTMLDivElement>(null);
+	const feedRef = useRef<HTMLDivElement>(null);
 	const inputRef = useRef<HTMLInputElement>(null);
+
+	const shouldScrollToBottom = useRef(true);
+	const prevScrollHeightRef = useRef<number>(0);
+
+	// Stable refs so callbacks never need state as deps (prevents re-render loops)
+	const feedItemsRef = useRef<FeedItem[]>([]);
+	const hasOlderRef = useRef(false);
+	const loadingOlderRef = useRef(false);
+	const activeConvoIdRef = useRef<string | null>(null);
+	const conversationsRef = useRef<Conversation[]>([]);
+
+	useEffect(() => {
+		feedItemsRef.current = feedItems;
+	}, [feedItems]);
+	useEffect(() => {
+		hasOlderRef.current = hasOlderMessages;
+	}, [hasOlderMessages]);
+	useEffect(() => {
+		loadingOlderRef.current = loadingOlder;
+	}, [loadingOlder]);
+	useEffect(() => {
+		activeConvoIdRef.current = activeConvoId;
+	}, [activeConvoId]);
+	useEffect(() => {
+		conversationsRef.current = conversations;
+	}, [conversations]);
 
 	const activeConvo = conversations.find((c) => c.id === activeConvoId) ?? null;
 
-	// Fetch conversations 
-
-	const fetchConversations = useCallback(async () => {
-		if (!user) return;
-		setLoadingConvos(true);
-
-		const { data, error } = await supabase
-			.from('conversations')
-			.select(
-				`
-				*,
-				pin:pin_id (id, title, price, images, listing_type),
-				messages (id, sender_id, content, timestamp)
-			`,
-			)
-			.or(`buyer_id.eq.${user.id},seller_id.eq.${user.id}`)
-			.order('last_activity', { ascending: false });
-
-		if (error) {
-			console.error('fetchConversations:', error);
-			setLoadingConvos(false);
-			return;
-		}
-
-		const otherIds = (data ?? []).map((c) =>
-			c.buyer_id === user.id ? c.seller_id : c.buyer_id,
-		);
-		const uniqueIds = [...new Set(otherIds)];
-
-		const { data: usersData } = await supabase
-			.from('users')
-			.select('id, username, avatar_url')
-			.in('id', uniqueIds);
-
-		const usersMap = Object.fromEntries(
-			(usersData ?? []).map((u) => [u.id, u]),
-		);
-
-		const mapped: Conversation[] = (data ?? []).map((c) => {
-			const otherId = c.buyer_id === user.id ? c.seller_id : c.buyer_id;
-			const msgs: Message[] = c.messages ?? [];
-			const sorted = [...msgs].sort(
-				(a, b) =>
-					new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
-			);
-
-			return {
-				id: c.id,
-				buyer_id: c.buyer_id,
-				seller_id: c.seller_id,
-				pin_id: c.pin_id,
-				created_at: c.created_at,
-				last_activity: c.last_activity,
-				other_user: usersMap[otherId] ?? {
-					id: otherId,
-					username: 'Unknown',
-					avatar_url: '',
-				},
-				pin: c.pin ?? null,
-				last_message: sorted[sorted.length - 1] ?? null,
-			};
-		});
-
-		setConversations(mapped);
-		setLoadingConvos(false);
-
-		const openId = searchParams.get('convo');
-		if (openId && mapped.find((c) => c.id === openId)) {
-			setActiveConvoId(openId);
-		}
-	}, [user, searchParams]);
+	// Fetch conversations (runs once on mount) 
 
 	useEffect(() => {
-		fetchConversations();
-	}, [fetchConversations]);
+		if (!user) return;
+		let cancelled = false;
 
-	// Fetch messages + offers and merge into feed 
+		const run = async () => {
+			setLoadingConvos(true);
 
-	const fetchFeed = useCallback(
-		async (convoId: string) => {
+			const { data, error } = await supabase
+				.from('conversations')
+				.select(
+					`*, pin:pin_id (id, title, price, images, listing_type), messages (id, sender_id, content, timestamp)`,
+				)
+				.or(`buyer_id.eq.${user.id},seller_id.eq.${user.id}`)
+				.order('last_activity', { ascending: false });
+
+			if (cancelled) return;
+			if (error) {
+				console.error('fetchConversations:', error);
+				setLoadingConvos(false);
+				return;
+			}
+
+			const otherIds = (data ?? []).map((c) =>
+				c.buyer_id === user.id ? c.seller_id : c.buyer_id,
+			);
+			const { data: usersData } = await supabase
+				.from('users')
+				.select('id, username, avatar_url')
+				.in('id', [...new Set(otherIds)]);
+
+			if (cancelled) return;
+			const usersMap = Object.fromEntries(
+				(usersData ?? []).map((u) => [u.id, u]),
+			);
+
+			const mapped: Conversation[] = (data ?? []).map((c) => {
+				const otherId = c.buyer_id === user.id ? c.seller_id : c.buyer_id;
+				const msgs: Message[] = c.messages ?? [];
+				const sorted = [...msgs].sort(
+					(a, b) =>
+						new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+				);
+				return {
+					id: c.id,
+					buyer_id: c.buyer_id,
+					seller_id: c.seller_id,
+					pin_id: c.pin_id,
+					created_at: c.created_at,
+					last_activity: c.last_activity,
+					other_user: usersMap[otherId] ?? {
+						id: otherId,
+						username: 'Unknown',
+						avatar_url: '',
+					},
+					pin: c.pin ?? null,
+					last_message: sorted[sorted.length - 1] ?? null,
+				};
+			});
+
+			setConversations(mapped);
+			setLoadingConvos(false);
+
+			const openId = searchParams.get('convo');
+			if (openId && mapped.find((c) => c.id === openId))
+				setActiveConvoId(openId);
+		};
+
+		run();
+		return () => {
+			cancelled = true;
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [user]); // intentionally omit searchParams — handled on first load only
+
+	// Fetch initial feed when conversation switches 
+
+	useEffect(() => {
+		if (!activeConvoId) return;
+		let cancelled = false;
+
+		const run = async () => {
 			setLoadingMessages(true);
+			setFeedItems([]);
+			setHasOlderMessages(false);
+			shouldScrollToBottom.current = true;
+
+			const convo = conversationsRef.current.find(
+				(c) => c.id === activeConvoId,
+			);
 
 			const [{ data: msgs }, { data: offers }] = await Promise.all([
 				supabase
 					.from('messages')
 					.select('*')
-					.eq('conversation_id', convoId)
-					.order('timestamp', { ascending: true }),
+					.eq('conversation_id', activeConvoId)
+					.order('timestamp', { ascending: false })
+					.limit(PAGE_SIZE),
 				supabase
 					.from('messages_offers')
 					.select('*')
-					.eq('conversation_id', convoId)
+					.eq('conversation_id', activeConvoId)
 					.order('created_at', { ascending: true }),
 			]);
 
-			// Find the conversation to determine who the buyer is (buyer = trade proposer)
-			const convo = conversations.find((c) => c.id === convoId);
+			if (cancelled) return;
 
-			const messageFeed: Message[] = (msgs ?? []).map((m) => ({
-				...m,
-				type: 'message' as const,
-			}));
+			const messageFeed: Message[] = (msgs ?? [])
+				.reverse()
+				.map((m) => ({ ...m, type: 'message' as const }));
+			const newHasOlder = (msgs ?? []).length === PAGE_SIZE;
+			setHasOlderMessages(newHasOlder);
+			hasOlderRef.current = newHasOlder;
+
 			const offerFeed: TradeOffer[] = (offers ?? []).map((o) => ({
 				...o,
 				sender_id: convo?.buyer_id ?? '',
 				type: 'offer' as const,
 			}));
 
-			// Merge and sort by timestamp
 			const merged: FeedItem[] = [...messageFeed, ...offerFeed].sort((a, b) => {
 				const aTime = a.type === 'message' ? a.timestamp : a.created_at;
 				const bTime = b.type === 'message' ? b.timestamp : b.created_at;
@@ -220,22 +261,112 @@ const Messages = () => {
 
 			setFeedItems(merged);
 			setLoadingMessages(false);
-		},
-		[conversations],
-	);
+		};
+
+		run();
+		return () => {
+			cancelled = true;
+		};
+	}, [activeConvoId]); // only re-runs when selected conversation changes
+
+	// Load older messages (reads everything via refs, no state deps) 
+
+	const loadOlderMessages = useCallback(async () => {
+		const convoId = activeConvoIdRef.current;
+		if (!convoId || loadingOlderRef.current || !hasOlderRef.current) return;
+
+		const oldest = feedItemsRef.current.find((i) => i.type === 'message') as
+			| Message
+			| undefined;
+		if (!oldest) return;
+
+		setLoadingOlder(true);
+		loadingOlderRef.current = true;
+		prevScrollHeightRef.current = feedRef.current?.scrollHeight ?? 0;
+		shouldScrollToBottom.current = false;
+
+		const { data: msgs } = await supabase
+			.from('messages')
+			.select('*')
+			.eq('conversation_id', convoId)
+			.lt('timestamp', oldest.timestamp)
+			.order('timestamp', { ascending: false })
+			.limit(PAGE_SIZE);
+
+		if (!msgs || msgs.length === 0) {
+			setHasOlderMessages(false);
+			hasOlderRef.current = false;
+			setLoadingOlder(false);
+			loadingOlderRef.current = false;
+			return;
+		}
+
+		const older: Message[] = msgs
+			.reverse()
+			.map((m) => ({ ...m, type: 'message' as const }));
+		const newHasOlder = msgs.length === PAGE_SIZE;
+		setHasOlderMessages(newHasOlder);
+		hasOlderRef.current = newHasOlder;
+
+		setFeedItems((prev) => {
+			const existingIds = new Set(prev.map((i) => i.id));
+			return [...older.filter((m) => !existingIds.has(m.id)), ...prev];
+		});
+
+		setLoadingOlder(false);
+		loadingOlderRef.current = false;
+	}, []); // stable — no deps, all state read via refs
+
+	//  Restore scroll position after prepend 
+
+	// Runs after every render; only acts when we were loading older messages
+	useEffect(() => {
+		if (
+			!shouldScrollToBottom.current &&
+			feedRef.current &&
+			prevScrollHeightRef.current > 0
+		) {
+			feedRef.current.scrollTop +=
+				feedRef.current.scrollHeight - prevScrollHeightRef.current;
+			prevScrollHeightRef.current = 0;
+		}
+	});
+
+	//  Scroll listener — registered once per conversation 
 
 	useEffect(() => {
-		if (!activeConvoId) return;
-		fetchFeed(activeConvoId);
-	}, [activeConvoId, fetchFeed]);
+		const el = feedRef.current;
+		if (!el) return;
 
-	// Realtime: new messages and trade offers
+		const onScroll = () => {
+			if (
+				el.scrollTop < 80 &&
+				hasOlderRef.current &&
+				!loadingOlderRef.current
+			) {
+				loadOlderMessages();
+			}
+		};
+
+		el.addEventListener('scroll', onScroll, { passive: true });
+		return () => el.removeEventListener('scroll', onScroll);
+	}, [activeConvoId, loadOlderMessages]); // re-register only when conversation changes
+
+	// Auto scroll to bottom on new messages 
+
+	useEffect(() => {
+		if (shouldScrollToBottom.current) {
+			messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+		}
+	}, [feedItems]);
+
+	// Realtime subscription
 
 	useEffect(() => {
 		if (!activeConvoId || !user) return;
 
 		const channel = supabase
-			.channel(`messages:${activeConvoId}`)
+			.channel(`feed:${activeConvoId}`)
 			.on(
 				'postgres_changes',
 				{
@@ -245,21 +376,43 @@ const Messages = () => {
 					filter: `conversation_id=eq.${activeConvoId}`,
 				},
 				(payload) => {
-					const newMsg = {
+					const incoming: Message = {
 						...(payload.new as Message),
-						type: 'message' as const,
+						type: 'message',
 					};
+
 					setFeedItems((prev) => {
-						if (prev.find((m) => m.id === newMsg.id)) return prev;
-						return [...prev, newMsg];
+						// Already in feed as confirmed message — skip
+						if (
+							prev.find((m) => m.id === incoming.id && !(m as Message).pending)
+						)
+							return prev;
+
+						// Swap out the matching pending bubble (same sender + content)
+						const withoutPending = prev.filter(
+							(m) =>
+								!(
+									m.type === 'message' &&
+									(m as Message).pending &&
+									m.sender_id === incoming.sender_id &&
+									(m as Message).content === incoming.content
+								),
+						);
+
+						if (withoutPending.find((m) => m.id === incoming.id))
+							return withoutPending;
+						return [...withoutPending, incoming];
 					});
+
+					shouldScrollToBottom.current = true;
+
 					setConversations((prev) =>
 						prev.map((c) =>
 							c.id === activeConvoId
 								? {
 										...c,
-										last_message: newMsg,
-										last_activity: newMsg.timestamp,
+										last_message: incoming,
+										last_activity: incoming.timestamp,
 									}
 								: c,
 						),
@@ -275,7 +428,9 @@ const Messages = () => {
 					filter: `conversation_id=eq.${activeConvoId}`,
 				},
 				(payload) => {
-					const convo = conversations.find((c) => c.id === activeConvoId);
+					const convo = conversationsRef.current.find(
+						(c) => c.id === activeConvoId,
+					);
 					const newOffer: TradeOffer = {
 						...(payload.new as any),
 						sender_id: convo?.buyer_id ?? '',
@@ -285,6 +440,7 @@ const Messages = () => {
 						if (prev.find((m) => m.id === newOffer.id)) return prev;
 						return [...prev, newOffer];
 					});
+					shouldScrollToBottom.current = true;
 				},
 			)
 			.subscribe();
@@ -292,21 +448,31 @@ const Messages = () => {
 		return () => {
 			supabase.removeChannel(channel);
 		};
-	}, [activeConvoId, user, conversations]);
+	}, [activeConvoId, user]); // intentionally no `conversations` dep — reads via ref
 
-	// Scroll to bottom 
-
-	useEffect(() => {
-		messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-	}, [feedItems.length]);
-
-	// Send message 
+	// Send message (optimistic) 
 
 	const handleSend = async () => {
 		if (!newMessage.trim() || !activeConvoId || !user || sending) return;
-		setSending(true);
+
 		const content = newMessage.trim();
 		setNewMessage('');
+		setSending(true);
+
+		// Show message immediately
+		const tempId = `temp-${Date.now()}`;
+		const tempMsg: Message = {
+			id: tempId,
+			conversation_id: activeConvoId,
+			sender_id: user.id,
+			content,
+			timestamp: new Date().toISOString(),
+			type: 'message',
+			pending: true,
+		};
+
+		shouldScrollToBottom.current = true;
+		setFeedItems((prev) => [...prev, tempMsg]);
 
 		const { error } = await supabase.from('messages').insert({
 			conversation_id: activeConvoId,
@@ -314,8 +480,12 @@ const Messages = () => {
 			content,
 		});
 
-		if (!error) {
-			await supabase
+		if (error) {
+			console.error('handleSend:', error);
+			setFeedItems((prev) => prev.filter((m) => m.id !== tempId));
+		} else {
+			// Fire and forget — realtime will confirm and swap out the pending item
+			supabase
 				.from('conversations')
 				.update({ last_activity: new Date().toISOString() })
 				.eq('id', activeConvoId);
@@ -325,251 +495,285 @@ const Messages = () => {
 		inputRef.current?.focus();
 	};
 
-	// Filtered conversations 
+	//Filtered conversations 
 
 	const filtered = conversations.filter((c) =>
 		c.other_user.username.toLowerCase().includes(searchQuery.toLowerCase()),
 	);
 
+	// Render
+
 	return (
-		<div className='min-h-screen bg-background flex flex-col'>
+		// Lock the entire page to the viewport — no body scroll
+		<div
+			className='flex flex-col bg-background'
+			style={{ height: '100dvh' }}>
 			<Navbar />
-			<SignedOutGuard message='Sign in to view your messages.'>
-				<div
-					className='flex-1 flex flex-col md:flex-row overflow-hidden'
-					style={{ height: 'calc(100vh - 64px)' }}>
-					{/* Conversation List */}
-					<div
-						className={cn(
-							'w-full md:w-80 lg:w-96 border-r border-border bg-card flex flex-col shrink-0',
-							activeConvoId ? 'hidden md:flex' : 'flex',
-						)}>
-						<div className='p-4 border-b border-border'>
-							<h1 className='font-display text-lg font-bold text-foreground mb-3'>
-								Messages
-							</h1>
-							<div className='relative'>
-								<Search className='absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground' />
-								<Input
-									placeholder='Search conversations...'
-									value={searchQuery}
-									onChange={(e) => setSearchQuery(e.target.value)}
-									className='pl-10'
-								/>
-							</div>
-						</div>
 
-						<div className='flex-1 overflow-y-auto'>
-							{loadingConvos ? (
-								<div className='flex items-center justify-center py-16'>
-									<span className='h-6 w-6 animate-spin rounded-full border-4 border-primary border-t-transparent' />
+			{/*
+			 * Wrap SignedOutGuard in a div that explicitly fills remaining space.
+			 * SignedOutGuard itself likely renders an opaque div — giving it a
+			 * flex parent with min-h-0 means it can't escape its bounds.
+			 */}
+			<div className='flex-1 min-h-0 flex flex-col overflow-hidden'>
+				<SignedOutGuard message='Sign in to view your messages.'>
+					{/* Two-column shell — fills the flex parent exactly */}
+					<div className='flex flex-row h-full overflow-hidden'>
+						{/* ── Conversation List ── */}
+						<div
+							className={cn(
+								'w-full md:w-80 lg:w-96 border-r border-border bg-card flex flex-col shrink-0 overflow-hidden',
+								activeConvoId ? 'hidden md:flex' : 'flex',
+							)}>
+							{/* Search header — fixed height */}
+							<div className='p-4 border-b border-border shrink-0'>
+								<h1 className='font-display text-lg font-bold text-foreground mb-3'>
+									Messages
+								</h1>
+								<div className='relative'>
+									<Search className='absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground' />
+									<Input
+										placeholder='Search conversations...'
+										value={searchQuery}
+										onChange={(e) => setSearchQuery(e.target.value)}
+										className='pl-10'
+									/>
 								</div>
-							) : filtered.length === 0 ? (
-								<p className='text-center text-sm text-muted-foreground py-16'>
-									No conversations yet.
-								</p>
-							) : (
-								filtered.map((convo) => (
-									<button
-										key={convo.id}
-										onClick={() => setActiveConvoId(convo.id)}
-										className={cn(
-											'w-full p-4 flex items-start gap-3 hover:bg-muted/50 transition-colors text-left border-b border-border',
-											activeConvoId === convo.id && 'bg-accent/30',
-										)}>
-										<Avatar className='w-11 h-11 shrink-0'>
-											<AvatarImage src={convo.other_user.avatar_url} />
-											<AvatarFallback>
-												{convo.other_user.username[0]?.toUpperCase()}
-											</AvatarFallback>
-										</Avatar>
-										<div className='flex-1 min-w-0'>
-											<div className='flex items-center justify-between gap-2'>
-												<span className='font-medium text-sm text-foreground truncate'>
-													{convo.other_user.username}
-												</span>
-												<span className='text-[10px] text-muted-foreground shrink-0'>
-													{formatTime(convo.last_activity)}
-												</span>
-											</div>
-											{convo.pin && (
-												<div className='text-[10px] text-primary truncate'>
-													Re: {convo.pin.title}
-												</div>
-											)}
-											<p className='text-xs text-muted-foreground truncate mt-0.5'>
-												{convo.last_message
-													? `${convo.last_message.sender_id === user?.id ? 'You: ' : ''}${convo.last_message.content}`
-													: 'No messages yet'}
-											</p>
-										</div>
-									</button>
-								))
-							)}
-						</div>
-					</div>
-
-					{/* Chat Area */}
-					{activeConvoId && activeConvo ? (
-						<div className='flex-1 flex flex-col min-w-0 overflow-hidden'>
-							{/* Chat Header */}
-							<div className='sticky top-0 z-10 p-4 border-b border-border bg-card flex items-center gap-3 shrink-0'>
-								<Button
-									variant='ghost'
-									size='icon'
-									className='md:hidden shrink-0'
-									onClick={() => setActiveConvoId(null)}>
-									<ArrowLeft className='h-5 w-5' />
-								</Button>
-
-								<Link
-									to={`/profile/${activeConvo.other_user.id}`}
-									className='flex items-center gap-3 flex-1 min-w-0'>
-									<Avatar className='w-10 h-10 shrink-0'>
-										<AvatarImage src={activeConvo.other_user.avatar_url} />
-										<AvatarFallback>
-											{activeConvo.other_user.username[0]?.toUpperCase()}
-										</AvatarFallback>
-									</Avatar>
-									<div className='min-w-0'>
-										<div className='font-medium text-foreground text-sm'>
-											{activeConvo.other_user.username}
-										</div>
-										<div className='flex items-center gap-1.5'>
-											<span className='relative flex h-2 w-2'>
-												<span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75' />
-												<span className='relative inline-flex rounded-full h-2 w-2 bg-green-500' />
-											</span>
-											<span className='text-xs text-muted-foreground'>
-												Active
-											</span>
-										</div>
-									</div>
-								</Link>
-
-								{activeConvo.pin && (
-									<Link
-										to={`/pin/${activeConvo.pin.id}`}
-										className='hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors shrink-0'>
-										{activeConvo.pin.images?.[0] && (
-											<img
-												src={activeConvo.pin.images[0]}
-												alt=''
-												className='w-8 h-8 rounded object-cover'
-											/>
-										)}
-										<div className='text-xs'>
-											<div className='text-foreground font-medium truncate max-w-[120px]'>
-												{activeConvo.pin.title}
-											</div>
-											<div className='text-primary font-semibold'>
-												{activeConvo.pin.listing_type === 'trade'
-													? 'Trade'
-													: `$${activeConvo.pin.price}`}
-											</div>
-										</div>
-									</Link>
-								)}
 							</div>
 
-							{/* Feed */}
-							<div className='flex-1 overflow-y-auto p-4 space-y-3'>
-								{loadingMessages ? (
+							{/* Scrollable list */}
+							<div className='flex-1 min-h-0 overflow-y-auto'>
+								{loadingConvos ? (
 									<div className='flex items-center justify-center py-16'>
 										<span className='h-6 w-6 animate-spin rounded-full border-4 border-primary border-t-transparent' />
 									</div>
-								) : feedItems.length === 0 ? (
+								) : filtered.length === 0 ? (
 									<p className='text-center text-sm text-muted-foreground py-16'>
-										No messages yet. Say hi!
+										No conversations yet.
 									</p>
 								) : (
-									feedItems.map((item) => {
-										const isOwn = item.sender_id === user?.id;
+									filtered.map((convo) => (
+										<button
+											key={convo.id}
+											onClick={() => setActiveConvoId(convo.id)}
+											className={cn(
+												'w-full p-4 flex items-start gap-3 hover:bg-muted/50 transition-colors text-left border-b border-border',
+												activeConvoId === convo.id && 'bg-accent/30',
+											)}>
+											<Avatar className='w-11 h-11 shrink-0'>
+												<AvatarImage src={convo.other_user.avatar_url} />
+												<AvatarFallback>
+													{convo.other_user.username[0]?.toUpperCase()}
+												</AvatarFallback>
+											</Avatar>
+											<div className='flex-1 min-w-0'>
+												<div className='flex items-center justify-between gap-2'>
+													<span className='font-medium text-sm text-foreground truncate'>
+														{convo.other_user.username}
+													</span>
+													<span className='text-[10px] text-muted-foreground shrink-0'>
+														{formatTime(convo.last_activity)}
+													</span>
+												</div>
+												{convo.pin && (
+													<div className='text-[10px] text-primary truncate'>
+														Re: {convo.pin.title}
+													</div>
+												)}
+												<p className='text-xs text-muted-foreground truncate mt-0.5'>
+													{convo.last_message
+														? `${convo.last_message.sender_id === user?.id ? 'You: ' : ''}${convo.last_message.content}`
+														: 'No messages yet'}
+												</p>
+											</div>
+										</button>
+									))
+								)}
+							</div>
+						</div>
 
-										if (item.type === 'offer') {
-											return (
-												<TradeOfferMessage
-													key={`offer-${item.id}`}
-													offer={item}
-													isOwn={isOwn}
+						{/* ── Chat Area ── */}
+						{activeConvoId && activeConvo ? (
+							/*
+							 * This column is a flex container with three rows:
+							 *   1. Header  — shrink-0 (fixed)
+							 *   2. Feed    — flex-1 min-h-0 overflow-y-auto (scrollable)
+							 *   3. Input   — shrink-0 (fixed, always visible at bottom)
+							 */
+							<div className='flex-1 flex flex-col min-w-0 overflow-hidden'>
+								{/* Row 1 — Header */}
+								<div className='p-4 border-b border-border bg-card flex items-center gap-3 shrink-0'>
+									<Button
+										variant='ghost'
+										size='icon'
+										className='md:hidden shrink-0'
+										onClick={() => setActiveConvoId(null)}>
+										<ArrowLeft className='h-5 w-5' />
+									</Button>
+									<Link
+										to={`/profile/${activeConvo.other_user.id}`}
+										className='flex items-center gap-3 flex-1 min-w-0'>
+										<Avatar className='w-10 h-10 shrink-0'>
+											<AvatarImage src={activeConvo.other_user.avatar_url} />
+											<AvatarFallback>
+												{activeConvo.other_user.username[0]?.toUpperCase()}
+											</AvatarFallback>
+										</Avatar>
+										<div className='min-w-0'>
+											<div className='font-medium text-foreground text-sm'>
+												{activeConvo.other_user.username}
+											</div>
+											<div className='flex items-center gap-1.5'>
+												<span className='relative flex h-2 w-2'>
+													<span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75' />
+													<span className='relative inline-flex rounded-full h-2 w-2 bg-green-500' />
+												</span>
+												<span className='text-xs text-muted-foreground'>
+													Active
+												</span>
+											</div>
+										</div>
+									</Link>
+									{activeConvo.pin && (
+										<Link
+											to={`/pin/${activeConvo.pin.id}`}
+											className='hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors shrink-0'>
+											{activeConvo.pin.images?.[0] && (
+												<img
+													src={activeConvo.pin.images[0]}
+													alt=''
+													className='w-8 h-8 rounded object-cover'
 												/>
-											);
-										}
-
-										// Regular message
-										return (
-											<div
-												key={item.id}
-												className={cn(
-													'flex',
-													isOwn ? 'justify-end' : 'justify-start',
-												)}>
-												<div
-													className={cn(
-														'max-w-[75%] rounded-2xl px-4 py-2.5',
-														isOwn
-															? 'bg-primary text-primary-foreground rounded-br-md'
-															: 'bg-card border border-border text-foreground rounded-bl-md',
-													)}>
-													<p className='text-sm'>{item.content}</p>
-													<p
-														className={cn(
-															'text-[10px] mt-1',
-															isOwn
-																? 'text-primary-foreground/70'
-																: 'text-muted-foreground',
-														)}>
-														{formatMessageTime(item.timestamp)}
-													</p>
+											)}
+											<div className='text-xs'>
+												<div className='text-foreground font-medium truncate max-w-[120px]'>
+													{activeConvo.pin.title}
+												</div>
+												<div className='text-primary font-semibold'>
+													{activeConvo.pin.listing_type === 'trade'
+														? 'Trade'
+														: `$${activeConvo.pin.price}`}
 												</div>
 											</div>
-										);
-									})
-								)}
-								<div ref={messagesEndRef} />
-							</div>
+										</Link>
+									)}
+								</div>
 
-							{/* Input */}
-							<div className='sticky bottom-0 z-10 p-4 border-t border-border bg-card shrink-0'>
-								<div className='flex gap-2'>
-									<Input
-										ref={inputRef}
-										placeholder='Type a message...'
-										value={newMessage}
-										onChange={(e) => setNewMessage(e.target.value)}
-										onKeyDown={(e) =>
-											e.key === 'Enter' && !e.shiftKey && handleSend()
-										}
-										className='flex-1'
-									/>
-									<Button
-										onClick={handleSend}
-										disabled={!newMessage.trim() || sending}
-										size='icon'>
-										{sending ? (
-											<span className='h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent' />
-										) : (
-											<Send className='h-4 w-4' />
-										)}
-									</Button>
+								{/* Row 2 — Scrollable feed */}
+								<div
+									ref={feedRef}
+									className='flex-1 min-h-0 overflow-y-auto p-4 space-y-3'>
+									{hasOlderMessages && (
+										<div className='flex justify-center py-2'>
+											{loadingOlder ? (
+												<span className='h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent' />
+											) : (
+												<button
+													onClick={loadOlderMessages}
+													className='text-xs text-muted-foreground hover:text-foreground transition-colors'>
+													Load older messages
+												</button>
+											)}
+										</div>
+									)}
+
+									{loadingMessages ? (
+										<div className='flex items-center justify-center py-16'>
+											<span className='h-6 w-6 animate-spin rounded-full border-4 border-primary border-t-transparent' />
+										</div>
+									) : feedItems.length === 0 ? (
+										<p className='text-center text-sm text-muted-foreground py-16'>
+											No messages yet. Say hi!
+										</p>
+									) : (
+										feedItems.map((item) => {
+											const isOwn = item.sender_id === user?.id;
+											if (item.type === 'offer') {
+												return (
+													<TradeOfferMessage
+														key={`offer-${item.id}`}
+														offer={item}
+														isOwn={isOwn}
+													/>
+												);
+											}
+											return (
+												<div
+													key={item.id}
+													className={cn(
+														'flex transition-opacity',
+														isOwn ? 'justify-end' : 'justify-start',
+														item.pending && 'opacity-60',
+													)}>
+													<div
+														className={cn(
+															'max-w-[75%] rounded-2xl px-4 py-2.5',
+															isOwn
+																? 'bg-primary text-primary-foreground rounded-br-md'
+																: 'bg-card border border-border text-foreground rounded-bl-md',
+														)}>
+														<p className='text-sm'>{item.content}</p>
+														<p
+															className={cn(
+																'text-[10px] mt-1',
+																isOwn
+																	? 'text-primary-foreground/70'
+																	: 'text-muted-foreground',
+															)}>
+															{item.pending
+																? 'Sending…'
+																: formatMessageTime(item.timestamp)}
+														</p>
+													</div>
+												</div>
+											);
+										})
+									)}
+									<div ref={messagesEndRef} />
+								</div>
+
+								{/* Row 3 — Input bar, always pinned at the bottom */}
+								<div className='p-4 border-t border-border bg-card shrink-0'>
+									<div className='flex gap-2'>
+										<Input
+											ref={inputRef}
+											placeholder='Type a message...'
+											value={newMessage}
+											onChange={(e) => setNewMessage(e.target.value)}
+											onKeyDown={(e) =>
+												e.key === 'Enter' && !e.shiftKey && handleSend()
+											}
+											className='flex-1'
+										/>
+										<Button
+											onClick={handleSend}
+											disabled={!newMessage.trim() || sending}
+											size='icon'>
+											{sending ? (
+												<span className='h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent' />
+											) : (
+												<Send className='h-4 w-4' />
+											)}
+										</Button>
+									</div>
 								</div>
 							</div>
-						</div>
-					) : (
-						<div className='hidden md:flex flex-1 items-center justify-center'>
-							<div className='text-center'>
-								<div className='text-5xl mb-4'>💬</div>
-								<h2 className='font-display text-lg font-semibold text-foreground mb-1'>
-									Your Messages
-								</h2>
-								<p className='text-sm text-muted-foreground'>
-									Select a conversation to start chatting
-								</p>
+						) : (
+							<div className='hidden md:flex flex-1 items-center justify-center'>
+								<div className='text-center'>
+									<div className='text-5xl mb-4'>💬</div>
+									<h2 className='font-display text-lg font-semibold text-foreground mb-1'>
+										Your Messages
+									</h2>
+									<p className='text-sm text-muted-foreground'>
+										Select a conversation to start chatting
+									</p>
+								</div>
 							</div>
-						</div>
-					)}
-				</div>
-			</SignedOutGuard>
+						)}
+					</div>
+				</SignedOutGuard>
+			</div>
 		</div>
 	);
 };
