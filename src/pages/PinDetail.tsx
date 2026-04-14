@@ -57,7 +57,29 @@ const PinDetail = () => {
 	const [lightboxOpen, setLightboxOpen] = useState(false);
 	const [savingInProgress, setSavingInProgress] = useState(false);
 
-	// Redirects to /login if user is not authenticated, returns false to halt the caller
+	/**
+	 * Safari on iOS does NOT shrink dvh/vh when the software keyboard appears.
+	 * We listen to visualViewport resize events to get the real available height
+	 * and use that to cap the drawer manually via inline style.
+	 */
+	const [viewportHeight, setViewportHeight] = useState<number>(
+		typeof window !== 'undefined'
+			? (window.visualViewport?.height ?? window.innerHeight)
+			: 800,
+	);
+
+	useEffect(() => {
+		const vv = window.visualViewport;
+		if (!vv) return;
+		const update = () => setViewportHeight(vv.height);
+		vv.addEventListener('resize', update);
+		vv.addEventListener('scroll', update);
+		return () => {
+			vv.removeEventListener('resize', update);
+			vv.removeEventListener('scroll', update);
+		};
+	}, []);
+
 	const requireAuth = (): boolean => {
 		if (!user) {
 			navigate('/login');
@@ -201,12 +223,11 @@ const PinDetail = () => {
 		if (!pin || savingInProgress) return;
 
 		setSavingInProgress(true);
-		toggle(pin.id); // optimistic
+		toggle(pin.id);
 
 		try {
 			const isSaved = favoritedIds.has(pin.id);
 			if (!isSaved) {
-				// was not saved before toggle, so we're adding
 				const { error } = await supabase
 					.from('user_favorites')
 					.insert({ user_id: user!.id, pin_id: pin.id });
@@ -219,8 +240,8 @@ const PinDetail = () => {
 					.eq('pin_id', pin.id);
 				if (error) throw error;
 			}
-		} catch (err) {
-			toggle(pin.id); // revert
+		} catch {
+			toggle(pin.id);
 			toast({
 				title: 'Error',
 				description: 'Failed to update saved listing.',
@@ -294,7 +315,6 @@ const PinDetail = () => {
 					<div className='grid md:grid-cols-2 gap-6'>
 						{/* ── Image Section ── */}
 						<div className='w-full min-w-0 space-y-3'>
-							{/* Main image */}
 							<div
 								className='relative w-full aspect-square max-h-[70vh] bg-muted rounded-xl overflow-hidden cursor-zoom-in'
 								onClick={() => primaryImage && setLightboxOpen(true)}>
@@ -309,8 +329,6 @@ const PinDetail = () => {
 										No image
 									</div>
 								)}
-
-								{/* Action buttons */}
 								<div className='absolute top-3 right-3 flex gap-2'>
 									<button
 										className='w-9 h-9 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center hover:bg-card transition-colors'
@@ -333,8 +351,6 @@ const PinDetail = () => {
 										<Share2 className='h-4 w-4 text-muted-foreground' />
 									</button>
 								</div>
-
-								{/* Badges */}
 								{pin.isTradeOnly && (
 									<div className='absolute top-3 left-3 px-2.5 py-1 rounded-full bg-primary text-primary-foreground text-xs font-medium'>
 										Trade Only
@@ -349,7 +365,6 @@ const PinDetail = () => {
 								</div>
 							</div>
 
-							{/* Thumbnail strip */}
 							{pin.images?.length > 1 && (
 								<div className='flex gap-2 overflow-x-auto pb-1'>
 									{pin.images.map((img, idx) => (
@@ -370,7 +385,7 @@ const PinDetail = () => {
 							)}
 						</div>
 
-						{/* Lightbox modal */}
+						{/* Lightbox */}
 						{lightboxOpen && (
 							<div
 								className='fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4'
@@ -412,7 +427,6 @@ const PinDetail = () => {
 								<span className='truncate'>{pin.location}</span>
 							</div>
 
-							{/* Seller Card */}
 							<Link
 								to={`/profile/${pin.user_id}`}
 								className='block card-tactile p-4'>
@@ -437,21 +451,18 @@ const PinDetail = () => {
 												</span>
 											)}
 										</div>
-										<div className='flex items-center gap-1 mt-1 min-w-0'>
-											{pin.rating && (
-												<div className='flex items-center gap-1 text-sm text-muted-foreground min-w-0'>
-													<Star className='h-3.5 w-3.5 fill-warning text-warning shrink-0' />
-													<span className='truncate'>
-														{pin.rating} (156) · 456 sales
-													</span>
-												</div>
-											)}
-										</div>
+										{pin.rating && (
+											<div className='flex items-center gap-1 mt-1 text-sm text-muted-foreground min-w-0'>
+												<Star className='h-3.5 w-3.5 fill-warning text-warning shrink-0' />
+												<span className='truncate'>
+													{pin.rating} (156) · 456 sales
+												</span>
+											</div>
+										)}
 									</div>
 								</div>
 							</Link>
 
-							{/* Description */}
 							<div>
 								<h3 className='font-display font-semibold text-foreground mb-2'>
 									Description
@@ -460,8 +471,6 @@ const PinDetail = () => {
 									{pin.description}
 								</p>
 							</div>
-
-							{/* Action Buttons */}
 
 							<div className='flex gap-2 pt-4'>
 								{pin.listing_type === 'trade' ? (
@@ -519,7 +528,6 @@ const PinDetail = () => {
 						</div>
 					</div>
 
-					{/* ── Similar Items ── */}
 					{similarPins.length > 0 && (
 						<section className='mt-8'>
 							<h2 className='font-display text-lg font-semibold text-foreground mb-4'>
@@ -537,7 +545,6 @@ const PinDetail = () => {
 						</section>
 					)}
 
-					{/* ── More from Seller ── */}
 					{sellerPins.length > 0 && (
 						<section className='mt-8'>
 							<div className='flex items-center justify-between mb-4'>
@@ -578,73 +585,92 @@ const PinDetail = () => {
 			<Drawer
 				open={messageDrawerOpen}
 				onOpenChange={setMessageDrawerOpen}>
-				<DrawerContent>
-					<div className='p-5 pb-8 max-w-lg mx-auto w-full'>
-						{/* Seller header */}
-						<div className='flex items-center gap-3 mb-4 p-3 rounded-xl bg-muted/60'>
-							{pin.avatar_url ? (
-								<img
-									src={pin.avatar_url}
-									alt={pin.username}
-									className='w-11 h-11 rounded-full object-cover shrink-0'
-								/>
-							) : (
-								<div className='w-11 h-11 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-lg shrink-0'>
-									{pin.username?.[0]?.toUpperCase() ?? '?'}
-								</div>
-							)}
-							<div className='flex-1 min-w-0'>
-								<div className='font-medium text-foreground text-sm truncate'>
-									{pin.username}
-								</div>
-								<div className='flex items-center gap-1.5 mt-0.5'>
-									<span className='relative flex h-2.5 w-2.5 shrink-0'>
-										<span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75' />
-										<span className='relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500' />
-									</span>
-									<span className='text-xs text-muted-foreground'>
-										Awaiting to send
-									</span>
-								</div>
-							</div>
-						</div>
-
-						{/* Pin context */}
-						<div className='flex items-center gap-2 mb-4 p-2 rounded-lg bg-muted/40 border border-border'>
-							{primaryImage && (
-								<img
-									src={primaryImage}
-									alt=''
-									className='w-10 h-10 rounded-lg object-cover shrink-0'
-								/>
-							)}
-							<div className='min-w-0 flex-1'>
-								<div className='text-xs font-medium text-foreground truncate'>
-									{pin.title}
-								</div>
-								<div className='text-xs text-primary font-semibold'>
-									{pin.listing_type === 'trade'
-										? 'Trade Only'
-										: `$${pin.price}`}
+				{/*
+				 * FIX 1 — Zoom: Safari auto-zooms when a focused input is < 16px font.
+				 *   The Textarea gets text-sm (~14px) from the design system.
+				 *   We override it with text-base (16px) on the textarea below.
+				 *
+				 * FIX 2 — Clipping: dvh/vh don't update when the iOS keyboard opens.
+				 *   We use a visualViewport listener (above) to get the real available
+				 *   height and pass it as an inline maxHeight so the drawer is always
+				 *   fully visible above the keyboard.
+				 */}
+				<DrawerContent
+					style={{ maxHeight: `${viewportHeight * 0.92}px` }}
+					className='flex flex-col'>
+					<div className='overflow-y-auto flex-1 overscroll-contain'>
+						<div className='p-5 pb-8 max-w-lg mx-auto w-full'>
+							{/* Seller header */}
+							<div className='flex items-center gap-3 mb-4 p-3 rounded-xl bg-muted/60'>
+								{pin.avatar_url ? (
+									<img
+										src={pin.avatar_url}
+										alt={pin.username}
+										className='w-11 h-11 rounded-full object-cover shrink-0'
+									/>
+								) : (
+									<div className='w-11 h-11 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-lg shrink-0'>
+										{pin.username?.[0]?.toUpperCase() ?? '?'}
+									</div>
+								)}
+								<div className='flex-1 min-w-0'>
+									<div className='font-medium text-foreground text-sm truncate'>
+										{pin.username}
+									</div>
+									<div className='flex items-center gap-1.5 mt-0.5'>
+										<span className='relative flex h-2.5 w-2.5 shrink-0'>
+											<span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75' />
+											<span className='relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500' />
+										</span>
+										<span className='text-xs text-muted-foreground'>
+											Awaiting to send
+										</span>
+									</div>
 								</div>
 							</div>
-						</div>
 
-						{/* Message input */}
-						<Textarea
-							placeholder={`Hi ${pin.username}, I'm interested in "${pin.title}"...`}
-							value={firstMessage}
-							onChange={(e) => setFirstMessage(e.target.value)}
-							className='min-h-[100px] mb-3 resize-none'
-							autoFocus
-						/>
-						<Button
-							onClick={handleSendFirstMessage}
-							disabled={!firstMessage.trim()}
-							className='w-full gap-2'>
-							<Send className='h-4 w-4' />
-							Send Message
-						</Button>
+							{/* Pin context */}
+							<div className='flex items-center gap-2 mb-4 p-2 rounded-lg bg-muted/40 border border-border'>
+								{primaryImage && (
+									<img
+										src={primaryImage}
+										alt=''
+										className='w-10 h-10 rounded-lg object-cover shrink-0'
+									/>
+								)}
+								<div className='min-w-0 flex-1'>
+									<div className='text-xs font-medium text-foreground truncate'>
+										{pin.title}
+									</div>
+									<div className='text-xs text-primary font-semibold'>
+										{pin.listing_type === 'trade'
+											? 'Trade Only'
+											: `$${pin.price}`}
+									</div>
+								</div>
+							</div>
+
+							{/*
+							 * text-base (16px) on the Textarea prevents Safari from
+							 * auto-zooming the page when this input is focused.
+							 * Remove autoFocus — it triggers the keyboard immediately on
+							 * open before the drawer has finished animating, which causes
+							 * the layout jump. User can tap to focus instead.
+							 */}
+							<Textarea
+								placeholder={`Hi ${pin.username}, I'm interested in "${pin.title}"...`}
+								value={firstMessage}
+								onChange={(e) => setFirstMessage(e.target.value)}
+								className='min-h-[100px] mb-3 resize-none text-base'
+							/>
+							<Button
+								onClick={handleSendFirstMessage}
+								disabled={!firstMessage.trim()}
+								className='w-full gap-2'>
+								<Send className='h-4 w-4' />
+								Send Message
+							</Button>
+						</div>
 					</div>
 				</DrawerContent>
 			</Drawer>
