@@ -63,7 +63,7 @@ type Conversation = {
 	last_message?: Message | null;
 };
 
-// Helpers 
+// Helpers
 
 const formatTime = (ts: string) => {
 	const date = new Date(ts);
@@ -82,7 +82,9 @@ const formatMessageTime = (ts: string) =>
 		minute: '2-digit',
 	});
 
-// Component 
+const PAGE_SIZE = 30;
+
+// Component
 
 const Messages = () => {
 	const { user } = useAuth();
@@ -97,13 +99,42 @@ const Messages = () => {
 	const [loadingConvos, setLoadingConvos] = useState(true);
 	const [loadingMessages, setLoadingMessages] = useState(false);
 	const [sending, setSending] = useState(false);
+	const [hasMoreMessages, setHasMoreMessages] = useState(false);
+	const [loadingMore, setLoadingMore] = useState(false);
 
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const inputRef = useRef<HTMLInputElement>(null);
+	const scrollContainerRef = useRef<HTMLDivElement>(null);
+	// Tracks whether the user is scrolled near the bottom
+	const isAtBottomRef = useRef(true);
+	// Oldest message timestamp for cursor-based pagination
+	const oldestTimestampRef = useRef<string | null>(null);
+	// Ref so realtime handlers never capture stale conversations state
+	const conversationsRef = useRef<Conversation[]>([]);
+	// Set to true on initial load so we can jump to bottom once
+	const isInitialLoadRef = useRef(false);
+	// Scroll-height snapshot taken before prepending older messages
+	const prevScrollHeightRef = useRef(0);
+	const shouldRestoreScrollRef = useRef(false);
 
 	const activeConvo = conversations.find((c) => c.id === activeConvoId) ?? null;
 
-	// Fetch conversations 
+	// Keep ref in sync with state (no extra renders)
+	useEffect(() => {
+		conversationsRef.current = conversations;
+	}, [conversations]);
+
+	// Restore scroll position after older messages are prepended
+	useEffect(() => {
+		if (!shouldRestoreScrollRef.current) return;
+		shouldRestoreScrollRef.current = false;
+		const container = scrollContainerRef.current;
+		if (container) {
+			container.scrollTop = container.scrollHeight - prevScrollHeightRef.current;
+		}
+	}, [feedItems]);
+
+	// Fetch conversations
 
 	const fetchConversations = useCallback(async () => {
 		if (!user) return;
@@ -179,18 +210,22 @@ const Messages = () => {
 		fetchConversations();
 	}, [fetchConversations]);
 
-	// Fetch messages + offers and merge into feed 
+	// Fetch latest PAGE_SIZE messages (no full history pull)
 
-	const fetchFeed = useCallback(
-		async (convoId: string) => {
-			setLoadingMessages(true);
+	const fetchFeed = useCallback(async (convoId: string) => {
+		setLoadingMessages(true);
+		setHasMoreMessages(false);
+		oldestTimestampRef.current = null;
+		isInitialLoadRef.current = true;
 
-			const [{ data: msgs }, { data: offers }] = await Promise.all([
+		const [{ data: msgs, count: msgCount }, { data: offers }] =
+			await Promise.all([
 				supabase
 					.from('messages')
-					.select('*')
+					.select('*', { count: 'exact' })
 					.eq('conversation_id', convoId)
-					.order('timestamp', { ascending: true }),
+					.order('timestamp', { ascending: false })
+					.limit(PAGE_SIZE),
 				supabase
 					.from('messages_offers')
 					.select('*')
@@ -198,41 +233,123 @@ const Messages = () => {
 					.order('created_at', { ascending: true }),
 			]);
 
-			// Find the conversation to determine who the buyer is (buyer = trade proposer)
-			const convo = conversations.find((c) => c.id === convoId);
+		// Use ref so this callback never needs conversations in its deps
+		const convo = conversationsRef.current.find((c) => c.id === convoId);
 
-			const messageFeed: Message[] = (msgs ?? []).map((m) => ({
-				...m,
-				type: 'message' as const,
-			}));
-			const offerFeed: TradeOffer[] = (offers ?? []).map((o) => ({
-				...o,
-				sender_id: convo?.buyer_id ?? '',
-				type: 'offer' as const,
-			}));
+		// msgs came back newest-first; reverse for chronological display
+		const messageFeed: Message[] = (msgs ?? [])
+			.slice()
+			.reverse()
+			.map((m) => ({ ...m, type: 'message' as const }));
 
-			// Merge and sort by timestamp
-			const merged: FeedItem[] = [...messageFeed, ...offerFeed].sort((a, b) => {
-				const aTime = a.type === 'message' ? a.timestamp : a.created_at;
-				const bTime = b.type === 'message' ? b.timestamp : b.created_at;
-				return new Date(aTime).getTime() - new Date(bTime).getTime();
-			});
+		const offerFeed: TradeOffer[] = (offers ?? []).map((o) => ({
+			...o,
+			sender_id: convo?.buyer_id ?? '',
+			type: 'offer' as const,
+		}));
 
-			setFeedItems(merged);
-			setLoadingMessages(false);
-		},
-		[conversations],
-	);
+		const merged: FeedItem[] = [...messageFeed, ...offerFeed].sort((a, b) => {
+			const aTime = a.type === 'message' ? a.timestamp : a.created_at;
+			const bTime = b.type === 'message' ? b.timestamp : b.created_at;
+			return new Date(aTime).getTime() - new Date(bTime).getTime();
+		});
+
+		setFeedItems(merged);
+		setHasMoreMessages((msgCount ?? 0) > PAGE_SIZE);
+
+		if (msgs && msgs.length > 0) {
+			// msgs is DESC so the last element is the oldest
+			oldestTimestampRef.current = msgs[msgs.length - 1].timestamp;
+		}
+
+		setLoadingMessages(false);
+	}, []); // intentionally empty — uses conversationsRef to avoid re-fetch loop
 
 	useEffect(() => {
 		if (!activeConvoId) return;
 		fetchFeed(activeConvoId);
 	}, [activeConvoId, fetchFeed]);
 
+	// Jump to bottom once after the initial load completes
+	useEffect(() => {
+		if (!loadingMessages && isInitialLoadRef.current) {
+			isInitialLoadRef.current = false;
+			const container = scrollContainerRef.current;
+			if (container) {
+				container.scrollTop = container.scrollHeight;
+			}
+			isAtBottomRef.current = true;
+		}
+	}, [loadingMessages]);
+
+	// Fetch older messages when the user scrolls up
+
+	const fetchMoreMessages = useCallback(async () => {
+		if (
+			!activeConvoId ||
+			loadingMore ||
+			!hasMoreMessages ||
+			!oldestTimestampRef.current
+		)
+			return;
+
+		setLoadingMore(true);
+
+		// Snapshot scroll height before we prepend anything
+		const container = scrollContainerRef.current;
+		prevScrollHeightRef.current = container?.scrollHeight ?? 0;
+
+		const { data: msgs } = await supabase
+			.from('messages')
+			.select('*')
+			.eq('conversation_id', activeConvoId)
+			.lt('timestamp', oldestTimestampRef.current)
+			.order('timestamp', { ascending: false })
+			.limit(PAGE_SIZE);
+
+		if (msgs && msgs.length > 0) {
+			oldestTimestampRef.current = msgs[msgs.length - 1].timestamp;
+			const olderMessages: Message[] = msgs
+				.slice()
+				.reverse()
+				.map((m) => ({ ...m, type: 'message' as const }));
+
+			setHasMoreMessages(msgs.length === PAGE_SIZE);
+			shouldRestoreScrollRef.current = true;
+			setFeedItems((prev) => [...olderMessages, ...prev]);
+		} else {
+			setHasMoreMessages(false);
+		}
+
+		setLoadingMore(false);
+	}, [activeConvoId, loadingMore, hasMoreMessages]);
+
+	// Track scroll position; trigger older-message load near the top
+
+	const handleScroll = useCallback(() => {
+		const container = scrollContainerRef.current;
+		if (!container) return;
+
+		const { scrollTop, scrollHeight, clientHeight } = container;
+		isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 60;
+
+		if (scrollTop < 80 && hasMoreMessages && !loadingMore) {
+			fetchMoreMessages();
+		}
+	}, [hasMoreMessages, loadingMore, fetchMoreMessages]);
+
 	// Realtime: new messages and trade offers
 
 	useEffect(() => {
 		if (!activeConvoId || !user) return;
+
+		const scrollToBottomIfNeeded = () => {
+			if (isAtBottomRef.current) {
+				requestAnimationFrame(() => {
+					messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+				});
+			}
+		};
 
 		const channel = supabase
 			.channel(`messages:${activeConvoId}`)
@@ -264,6 +381,7 @@ const Messages = () => {
 								: c,
 						),
 					);
+					scrollToBottomIfNeeded();
 				},
 			)
 			.on(
@@ -275,7 +393,9 @@ const Messages = () => {
 					filter: `conversation_id=eq.${activeConvoId}`,
 				},
 				(payload) => {
-					const convo = conversations.find((c) => c.id === activeConvoId);
+					const convo = conversationsRef.current.find(
+						(c) => c.id === activeConvoId,
+					);
 					const newOffer: TradeOffer = {
 						...(payload.new as any),
 						sender_id: convo?.buyer_id ?? '',
@@ -285,6 +405,7 @@ const Messages = () => {
 						if (prev.find((m) => m.id === newOffer.id)) return prev;
 						return [...prev, newOffer];
 					});
+					scrollToBottomIfNeeded();
 				},
 			)
 			.subscribe();
@@ -292,21 +413,18 @@ const Messages = () => {
 		return () => {
 			supabase.removeChannel(channel);
 		};
-	}, [activeConvoId, user, conversations]);
+	}, [activeConvoId, user]); // no conversations dep — uses conversationsRef
 
-	// Scroll to bottom 
-
-	useEffect(() => {
-		messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-	}, [feedItems.length]);
-
-	// Send message 
+	// Send message
 
 	const handleSend = async () => {
 		if (!newMessage.trim() || !activeConvoId || !user || sending) return;
 		setSending(true);
 		const content = newMessage.trim();
 		setNewMessage('');
+
+		// User is sending, so always scroll to their new message
+		isAtBottomRef.current = true;
 
 		const { error } = await supabase.from('messages').insert({
 			conversation_id: activeConvoId,
@@ -325,7 +443,7 @@ const Messages = () => {
 		inputRef.current?.focus();
 	};
 
-	// Filtered conversations 
+	// Filtered conversations
 
 	const filtered = conversations.filter((c) =>
 		c.other_user.username.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -473,60 +591,83 @@ const Messages = () => {
 							</div>
 
 							{/* Feed */}
-							<div className='flex-1 overflow-y-auto p-4 space-y-3'>
+							<div
+								ref={scrollContainerRef}
+								onScroll={handleScroll}
+								className='flex-1 overflow-y-auto p-4 space-y-3'>
 								{loadingMessages ? (
 									<div className='flex items-center justify-center py-16'>
 										<span className='h-6 w-6 animate-spin rounded-full border-4 border-primary border-t-transparent' />
 									</div>
-								) : feedItems.length === 0 ? (
-									<p className='text-center text-sm text-muted-foreground py-16'>
-										No messages yet. Say hi!
-									</p>
 								) : (
-									feedItems.map((item) => {
-										const isOwn = item.sender_id === user?.id;
-
-										if (item.type === 'offer') {
-											return (
-												<TradeOfferMessage
-													key={`offer-${item.id}`}
-													offer={item}
-													isOwn={isOwn}
-												/>
-											);
-										}
-
-										// Regular message
-										return (
-											<div
-												key={item.id}
-												className={cn(
-													'flex',
-													isOwn ? 'justify-end' : 'justify-start',
-												)}>
-												<div
-													className={cn(
-														'max-w-[75%] rounded-2xl px-4 py-2.5',
-														isOwn
-															? 'bg-primary text-primary-foreground rounded-br-md'
-															: 'bg-card border border-border text-foreground rounded-bl-md',
-													)}>
-													<p className='text-sm'>{item.content}</p>
-													<p
-														className={cn(
-															'text-[10px] mt-1',
-															isOwn
-																? 'text-primary-foreground/70'
-																: 'text-muted-foreground',
-														)}>
-														{formatMessageTime(item.timestamp)}
-													</p>
-												</div>
+									<>
+										{/* Older-message loader */}
+										{loadingMore && (
+											<div className='flex justify-center py-2'>
+												<span className='h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent' />
 											</div>
-										);
-									})
+										)}
+										{hasMoreMessages && !loadingMore && (
+											<div className='flex justify-center py-2'>
+												<button
+													onClick={fetchMoreMessages}
+													className='text-xs text-muted-foreground hover:text-foreground transition-colors'>
+													Load older messages
+												</button>
+											</div>
+										)}
+
+										{feedItems.length === 0 ? (
+											<p className='text-center text-sm text-muted-foreground py-16'>
+												No messages yet. Say hi!
+											</p>
+										) : (
+											feedItems.map((item) => {
+												const isOwn = item.sender_id === user?.id;
+
+												if (item.type === 'offer') {
+													return (
+														<TradeOfferMessage
+															key={`offer-${item.id}`}
+															offer={item}
+															isOwn={isOwn}
+														/>
+													);
+												}
+
+												// Regular message
+												return (
+													<div
+														key={item.id}
+														className={cn(
+															'flex',
+															isOwn ? 'justify-end' : 'justify-start',
+														)}>
+														<div
+															className={cn(
+																'max-w-[75%] rounded-2xl px-4 py-2.5',
+																isOwn
+																	? 'bg-primary text-primary-foreground rounded-br-md'
+																	: 'bg-card border border-border text-foreground rounded-bl-md',
+															)}>
+															<p className='text-sm'>{item.content}</p>
+															<p
+																className={cn(
+																	'text-[10px] mt-1',
+																	isOwn
+																		? 'text-primary-foreground/70'
+																		: 'text-muted-foreground',
+																)}>
+																{formatMessageTime(item.timestamp)}
+															</p>
+														</div>
+													</div>
+												);
+											})
+										)}
+										<div ref={messagesEndRef} />
+									</>
 								)}
-								<div ref={messagesEndRef} />
 							</div>
 
 							{/* Input */}
