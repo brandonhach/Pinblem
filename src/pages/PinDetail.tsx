@@ -57,29 +57,6 @@ const PinDetail = () => {
 	const [lightboxOpen, setLightboxOpen] = useState(false);
 	const [savingInProgress, setSavingInProgress] = useState(false);
 
-	/**
-	 * Safari on iOS does NOT shrink dvh/vh when the software keyboard appears.
-	 * We listen to visualViewport resize events to get the real available height
-	 * and use that to cap the drawer manually via inline style.
-	 */
-	const [viewportHeight, setViewportHeight] = useState<number>(
-		typeof window !== 'undefined'
-			? (window.visualViewport?.height ?? window.innerHeight)
-			: 800,
-	);
-
-	useEffect(() => {
-		const vv = window.visualViewport;
-		if (!vv) return;
-		const update = () => setViewportHeight(vv.height);
-		vv.addEventListener('resize', update);
-		vv.addEventListener('scroll', update);
-		return () => {
-			vv.removeEventListener('resize', update);
-			vv.removeEventListener('scroll', update);
-		};
-	}, []);
-
 	const requireAuth = (): boolean => {
 		if (!user) {
 			navigate('/login');
@@ -587,18 +564,12 @@ const PinDetail = () => {
 				onOpenChange={setMessageDrawerOpen}
 				noBodyStyles>
 				{/*
-				 * FIX 1 — Zoom: Safari auto-zooms when a focused input is < 16px font.
+				 * FIX — Zoom: Safari auto-zooms when a focused input is < 16px font.
 				 *   The Textarea gets text-sm (~14px) from the design system.
 				 *   We override it with text-base (16px) on the textarea below.
-				 *
-				 * FIX 2 — Clipping: dvh/vh don't update when the iOS keyboard opens.
-				 *   We use a visualViewport listener (above) to get the real available
-				 *   height and pass it as an inline maxHeight so the drawer is always
-				 *   fully visible above the keyboard.
+				 *   Keyboard positioning is handled inside DrawerContent via visualViewport.
 				 */}
-				<DrawerContent
-					style={{ maxHeight: `${viewportHeight * 0.92}px` }}
-					className='flex flex-col'>
+				<DrawerContent className='flex flex-col'>
 					<div className='overflow-y-auto flex-1 min-h-0 overscroll-contain'>
 						<div className='p-5 pb-8 max-w-lg mx-auto w-full'>
 							{/* Seller header */}

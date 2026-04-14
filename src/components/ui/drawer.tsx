@@ -32,24 +32,28 @@ DrawerOverlay.displayName = DrawerPrimitive.Overlay.displayName;
 /**
  * On iOS Safari, when the keyboard opens:
  *   - The visual viewport shrinks in HEIGHT
- *   - The visual viewport scrolls down (offsetTop increases)
+ *   - The visual viewport's offsetTop may increase if the page scrolls
  *   - But `position: fixed` elements stay relative to the LAYOUT viewport
- *     which hasn't changed — so `bottom: 0` ends up BEHIND the keyboard.
+ *     (window.innerHeight), so `bottom: 0` ends up BEHIND the keyboard.
  *
- * Fix: read visualViewport.offsetTop and subtract it from the bottom
- * position so the drawer tracks the real visible bottom edge.
+ * Fix: compute the actual keyboard height as
+ *   window.innerHeight - visualViewport.height - visualViewport.offsetTop
+ * and use that as the `bottom` offset so the drawer sits above the keyboard.
  * Also cap maxHeight to visualViewport.height so it never overflows.
  */
 function useVisualViewport() {
-	const getValues = () => ({
-		height: window.visualViewport?.height ?? window.innerHeight,
-		offsetTop: window.visualViewport?.offsetTop ?? 0,
-	});
+	const getValues = () => {
+		const vv = window.visualViewport;
+		const height = vv?.height ?? window.innerHeight;
+		const offsetTop = vv?.offsetTop ?? 0;
+		const keyboardOffset = Math.max(0, window.innerHeight - height - offsetTop);
+		return { height, keyboardOffset };
+	};
 
 	const [vp, setVp] = React.useState(
 		typeof window !== 'undefined'
 			? getValues
-			: () => ({ height: 800, offsetTop: 0 }),
+			: () => ({ height: 800, keyboardOffset: 0 }),
 	);
 
 	React.useEffect(() => {
@@ -71,7 +75,7 @@ const DrawerContent = React.forwardRef<
 	React.ElementRef<typeof DrawerPrimitive.Content>,
 	React.ComponentPropsWithoutRef<typeof DrawerPrimitive.Content>
 >(({ className, children, style, ...props }, ref) => {
-	const { height, offsetTop } = useVisualViewport();
+	const { height, keyboardOffset } = useVisualViewport();
 
 	return (
 		<DrawerPortal>
@@ -83,11 +87,9 @@ const DrawerContent = React.forwardRef<
 					className,
 				)}
 				style={{
-					// Anchor to the real visible bottom, not the layout viewport bottom.
-					// offsetTop is how far the visual viewport has scrolled (grows when keyboard opens).
-					// We set `bottom` instead of relying on the default so the drawer
-					// moves up with the keyboard rather than sliding behind it.
-					bottom: offsetTop,
+					// Lift the drawer above the keyboard. keyboardOffset is the
+					// real keyboard height: window.innerHeight − visualViewport.height − offsetTop.
+					bottom: keyboardOffset,
 					maxHeight: height * 0.92,
 					...style,
 				}}
