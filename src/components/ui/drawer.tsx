@@ -1,6 +1,5 @@
 import * as React from 'react';
 import { Drawer as DrawerPrimitive } from 'vaul';
-
 import { cn } from '@/lib/utils';
 
 const Drawer = ({
@@ -15,9 +14,7 @@ const Drawer = ({
 Drawer.displayName = 'Drawer';
 
 const DrawerTrigger = DrawerPrimitive.Trigger;
-
 const DrawerPortal = DrawerPrimitive.Portal;
-
 const DrawerClose = DrawerPrimitive.Close;
 
 const DrawerOverlay = React.forwardRef<
@@ -33,24 +30,32 @@ const DrawerOverlay = React.forwardRef<
 DrawerOverlay.displayName = DrawerPrimitive.Overlay.displayName;
 
 /**
- * useVisualViewportHeight
+ * On iOS Safari, when the keyboard opens:
+ *   - The visual viewport shrinks in HEIGHT
+ *   - The visual viewport scrolls down (offsetTop increases)
+ *   - But `position: fixed` elements stay relative to the LAYOUT viewport
+ *     which hasn't changed — so `bottom: 0` ends up BEHIND the keyboard.
  *
- * On iOS Safari, the software keyboard shrinks the visual viewport but does NOT
- * update vh, dvh, or any CSS length unit. This hook listens to the visualViewport
- * API and returns the real available height in pixels so we can cap the drawer
- * via an inline style — the only reliable way to beat Vaul's fixed positioning.
+ * Fix: read visualViewport.offsetTop and subtract it from the bottom
+ * position so the drawer tracks the real visible bottom edge.
+ * Also cap maxHeight to visualViewport.height so it never overflows.
  */
-function useVisualViewportHeight() {
-	const [height, setHeight] = React.useState<number>(() =>
+function useVisualViewport() {
+	const getValues = () => ({
+		height: window.visualViewport?.height ?? window.innerHeight,
+		offsetTop: window.visualViewport?.offsetTop ?? 0,
+	});
+
+	const [vp, setVp] = React.useState(
 		typeof window !== 'undefined'
-			? (window.visualViewport?.height ?? window.innerHeight)
-			: 800,
+			? getValues
+			: () => ({ height: 800, offsetTop: 0 }),
 	);
 
 	React.useEffect(() => {
 		const vv = window.visualViewport;
 		if (!vv) return;
-		const update = () => setHeight(vv.height);
+		const update = () => setVp(getValues());
 		vv.addEventListener('resize', update);
 		vv.addEventListener('scroll', update);
 		return () => {
@@ -59,14 +64,14 @@ function useVisualViewportHeight() {
 		};
 	}, []);
 
-	return height;
+	return vp;
 }
 
 const DrawerContent = React.forwardRef<
 	React.ElementRef<typeof DrawerPrimitive.Content>,
 	React.ComponentPropsWithoutRef<typeof DrawerPrimitive.Content>
 >(({ className, children, style, ...props }, ref) => {
-	const viewportHeight = useVisualViewportHeight();
+	const { height, offsetTop } = useVisualViewport();
 
 	return (
 		<DrawerPortal>
@@ -74,20 +79,19 @@ const DrawerContent = React.forwardRef<
 			<DrawerPrimitive.Content
 				ref={ref}
 				className={cn(
-					// `h-auto` removed — we control height via maxHeight inline style below.
-					// `overflow-hidden` keeps rounded corners clipping correctly.
-					'fixed inset-x-0 bottom-0 z-50 mt-24 flex flex-col rounded-t-[10px] border bg-background overflow-hidden',
+					'fixed inset-x-0 z-50 mt-24 flex flex-col rounded-t-[10px] border bg-background overflow-hidden',
 					className,
 				)}
 				style={{
-					// Cap the drawer to 92% of the real visible viewport height.
-					// This shrinks automatically when the keyboard opens because
-					// visualViewport.height updates in real time on iOS.
-					maxHeight: `${viewportHeight * 0.92}px`,
+					// Anchor to the real visible bottom, not the layout viewport bottom.
+					// offsetTop is how far the visual viewport has scrolled (grows when keyboard opens).
+					// We set `bottom` instead of relying on the default so the drawer
+					// moves up with the keyboard rather than sliding behind it.
+					bottom: offsetTop,
+					maxHeight: height * 0.92,
 					...style,
 				}}
 				{...props}>
-				{/* Drag handle */}
 				<div className='mx-auto mt-4 h-2 w-[100px] shrink-0 rounded-full bg-muted' />
 				{children}
 			</DrawerPrimitive.Content>
