@@ -10,7 +10,6 @@ import {
 	RefreshCw,
 	ShoppingCart,
 	Send,
-	SquarePen,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
@@ -50,7 +49,6 @@ const PinDetail = () => {
 	const [sellerPins, setSellerPins] = useState<Pin[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [notFound, setNotFound] = useState(false);
-	const [liked, setLiked] = useState(false);
 	const [isTradeOpen, setIsTradeOpen] = useState(false);
 	const [isTradeLoading, setIsTradeLoading] = useState(false);
 	const [messageDrawerOpen, setMessageDrawerOpen] = useState(false);
@@ -58,6 +56,29 @@ const PinDetail = () => {
 	const [selectedImage, setSelectedImage] = useState<string | null>(null);
 	const [lightboxOpen, setLightboxOpen] = useState(false);
 	const [savingInProgress, setSavingInProgress] = useState(false);
+
+	/**
+	 * Safari on iOS does NOT shrink dvh/vh when the software keyboard appears.
+	 * We listen to visualViewport resize events to get the real available height
+	 * and use that to cap the drawer manually via inline style.
+	 */
+	const [viewportHeight, setViewportHeight] = useState<number>(
+		typeof window !== 'undefined'
+			? (window.visualViewport?.height ?? window.innerHeight)
+			: 800,
+	);
+
+	useEffect(() => {
+		const vv = window.visualViewport;
+		if (!vv) return;
+		const update = () => setViewportHeight(vv.height);
+		vv.addEventListener('resize', update);
+		vv.addEventListener('scroll', update);
+		return () => {
+			vv.removeEventListener('resize', update);
+			vv.removeEventListener('scroll', update);
+		};
+	}, []);
 
 	const requireAuth = (): boolean => {
 		if (!user) {
@@ -89,7 +110,6 @@ const PinDetail = () => {
 
 			const mapped = mapRow(data);
 			setPin(mapped);
-			setLiked(mapped.isFavorite ?? false);
 
 			const { data: similar } = await supabase
 				.from('pins')
@@ -108,7 +128,6 @@ const PinDetail = () => {
 				.limit(4);
 
 			setSellerPins((fromSeller ?? []).map(mapRow));
-
 			setLoading(false);
 		};
 
@@ -179,7 +198,6 @@ const PinDetail = () => {
 
 		setMessageDrawerOpen(false);
 		setFirstMessage('');
-
 		navigate(`/messages?convo=${convoId}`);
 	};
 
@@ -222,7 +240,7 @@ const PinDetail = () => {
 					.eq('pin_id', pin.id);
 				if (error) throw error;
 			}
-		} catch (err) {
+		} catch {
 			toggle(pin.id);
 			toast({
 				title: 'Error',
@@ -280,7 +298,6 @@ const PinDetail = () => {
 		<div className='min-h-screen w-full max-w-full overflow-x-hidden bg-background'>
 			<Navbar />
 
-			{/* Back Button */}
 			<div className='w-full px-4 py-3'>
 				<Link to='/'>
 					<Button
@@ -312,7 +329,6 @@ const PinDetail = () => {
 										No image
 									</div>
 								)}
-
 								<div className='absolute top-3 right-3 flex gap-2'>
 									<button
 										className='w-9 h-9 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center hover:bg-card transition-colors'
@@ -335,7 +351,6 @@ const PinDetail = () => {
 										<Share2 className='h-4 w-4 text-muted-foreground' />
 									</button>
 								</div>
-
 								{pin.isTradeOnly && (
 									<div className='absolute top-3 left-3 px-2.5 py-1 rounded-full bg-primary text-primary-foreground text-xs font-medium'>
 										Trade Only
@@ -571,13 +586,19 @@ const PinDetail = () => {
 				open={messageDrawerOpen}
 				onOpenChange={setMessageDrawerOpen}>
 				{/*
-				 * On mobile Safari, opening the keyboard shrinks the visual viewport.
-				 * max-h-[85dvh] caps the drawer to the dynamic viewport height so it
-				 * never overflows, and overflow-y-auto lets the content scroll if the
-				 * keyboard pushes things up further.
+				 * FIX 1 — Zoom: Safari auto-zooms when a focused input is < 16px font.
+				 *   The Textarea gets text-sm (~14px) from the design system.
+				 *   We override it with text-base (16px) on the textarea below.
+				 *
+				 * FIX 2 — Clipping: dvh/vh don't update when the iOS keyboard opens.
+				 *   We use a visualViewport listener (above) to get the real available
+				 *   height and pass it as an inline maxHeight so the drawer is always
+				 *   fully visible above the keyboard.
 				 */}
-				<DrawerContent className='max-h-[85dvh]'>
-					<div className='overflow-y-auto flex-1'>
+				<DrawerContent
+					style={{ maxHeight: `${viewportHeight * 0.92}px` }}
+					className='flex flex-col'>
+					<div className='overflow-y-auto flex-1 overscroll-contain'>
 						<div className='p-5 pb-8 max-w-lg mx-auto w-full'>
 							{/* Seller header */}
 							<div className='flex items-center gap-3 mb-4 p-3 rounded-xl bg-muted/60'>
@@ -629,13 +650,18 @@ const PinDetail = () => {
 								</div>
 							</div>
 
-							{/* Message input */}
+							{/*
+							 * text-base (16px) on the Textarea prevents Safari from
+							 * auto-zooming the page when this input is focused.
+							 * Remove autoFocus — it triggers the keyboard immediately on
+							 * open before the drawer has finished animating, which causes
+							 * the layout jump. User can tap to focus instead.
+							 */}
 							<Textarea
 								placeholder={`Hi ${pin.username}, I'm interested in "${pin.title}"...`}
 								value={firstMessage}
 								onChange={(e) => setFirstMessage(e.target.value)}
-								className='min-h-[100px] mb-3 resize-none'
-								autoFocus
+								className='min-h-[100px] mb-3 resize-none text-base'
 							/>
 							<Button
 								onClick={handleSendFirstMessage}
