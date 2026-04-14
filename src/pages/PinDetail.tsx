@@ -584,7 +584,8 @@ const PinDetail = () => {
 			{/* ── Message Seller Drawer ── */}
 			<Drawer
 				open={messageDrawerOpen}
-				onOpenChange={setMessageDrawerOpen}>
+				onOpenChange={setMessageDrawerOpen}
+				noBodyStyles>
 				{/*
 				 * FIX 1 — Zoom: Safari auto-zooms when a focused input is < 16px font.
 				 *   The Textarea gets text-sm (~14px) from the design system.
@@ -598,7 +599,7 @@ const PinDetail = () => {
 				<DrawerContent
 					style={{ maxHeight: `${viewportHeight * 0.92}px` }}
 					className='flex flex-col'>
-					<div className='overflow-y-auto flex-1 overscroll-contain'>
+					<div className='overflow-y-auto flex-1 min-h-0 overscroll-contain'>
 						<div className='p-5 pb-8 max-w-lg mx-auto w-full'>
 							{/* Seller header */}
 							<div className='flex items-center gap-3 mb-4 p-3 rounded-xl bg-muted/60'>
