@@ -208,11 +208,26 @@ const Messages = () => {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [user]); // intentionally omit searchParams — handled on first load only
 
-	// Fetch initial feed when conversation switches 
+	// Fetch initial feed when conversation switches
 
 	useEffect(() => {
-		if (!activeConvoId) return;
+		if (!activeConvoId || !user) return;
 		let cancelled = false;
+
+		// Mark this conversation as read for the current user
+		const convoForRead = conversationsRef.current.find(
+			(c) => c.id === activeConvoId,
+		);
+		if (convoForRead) {
+			const isBuyer = convoForRead.buyer_id === user.id;
+			supabase
+				.from('conversations')
+				.update({
+					[isBuyer ? 'last_read_buyer_at' : 'last_read_seller_at']:
+						new Date().toISOString(),
+				})
+				.eq('id', activeConvoId);
+		}
 
 		const run = async () => {
 			setLoadingMessages(true);
@@ -485,9 +500,17 @@ const Messages = () => {
 			setFeedItems((prev) => prev.filter((m) => m.id !== tempId));
 		} else {
 			// Fire and forget — realtime will confirm and swap out the pending item
+			const now = new Date().toISOString();
+			const convo = conversationsRef.current.find(
+				(c) => c.id === activeConvoId,
+			);
+			const isBuyer = convo?.buyer_id === user.id;
 			supabase
 				.from('conversations')
-				.update({ last_activity: new Date().toISOString() })
+				.update({
+					last_activity: now,
+					[isBuyer ? 'last_read_buyer_at' : 'last_read_seller_at']: now,
+				})
 				.eq('id', activeConvoId);
 		}
 

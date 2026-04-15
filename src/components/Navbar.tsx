@@ -20,21 +20,17 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from "@/contexts/AuthContext";
-
-
-const notifications = [
-  { id: 1, title: "New trade offer", message: "Mickey Mouse pin trade request from StitchLover", time: "2m ago", unread: true, emoji: "🔄" },
-  { id: 2, title: "Price drop alert", message: "Stitch pin is now $15", time: "1h ago", unread: true, emoji: "💰" },
-  { id: 3, title: "Trade completed", message: "Your Elsa pin trade is complete", time: "3h ago", unread: false, emoji: "✅" },
-  { id: 4, title: "New review", message: "PrincessPins left you a 5-star review", time: "5h ago", unread: false, emoji: "⭐" },
-  { id: 5, title: "New follower", message: "MarvelFanatic started following you", time: "1d ago", unread: false, emoji: "👤" },
-];
+import { useNotifications } from "@/hooks/useNotifications";
+import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 
 const Navbar = () => {
   const [location, setLocation] = useState("Orlando, FL");
   const [locationSearch, setLocationSearch] = useState("");
   const [showLocationSearch, setShowLocationSearch] = useState(false);
   const { user, profile } = useAuth();
+
+  const { notifications, unreadCount, markAllRead } = useNotifications();
+  const unreadMessages = useUnreadMessages();
 
   const suggestedLocations = [
     "Orlando, FL", "Anaheim, CA", "Los Angeles, CA", "New York, NY",
@@ -46,9 +42,24 @@ const Navbar = () => {
     loc.toLowerCase().includes(locationSearch.toLowerCase())
   );
 
+  const formatTime = (ts: string) => {
+    const diff = Date.now() - new Date(ts).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+  };
 
-   const unreadCount = notifications.filter(n => n.unread).length;
-
+  const typeEmoji = (type: string) => {
+    const map: Record<string, string> = {
+      message: '💬',
+      review: '⭐',
+      trade_offer: '🔄',
+      price_drop: '💰',
+    };
+    return map[type] ?? '🔔';
+  };
 
   return (
 		<header className='sticky top-0 z-50 w-full border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80'>
@@ -92,7 +103,7 @@ const Navbar = () => {
 										<Bell className='h-5 w-5' />
 										{unreadCount > 0 && (
 											<span className='absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground flex items-center justify-center'>
-												{unreadCount}
+												{unreadCount > 9 ? '9+' : unreadCount}
 											</span>
 										)}
 									</Button>
@@ -104,42 +115,51 @@ const Navbar = () => {
 										<DropdownMenuLabel className='p-0 text-foreground'>
 											Notifications
 										</DropdownMenuLabel>
-										<button className='text-xs text-primary hover:underline font-medium'>
-											Mark all read
-										</button>
+										{unreadCount > 0 && (
+											<button
+												className='text-xs text-primary hover:underline font-medium'
+												onClick={markAllRead}>
+												Mark all read
+											</button>
+										)}
 									</div>
 									<DropdownMenuSeparator />
 									<div className='max-h-72 overflow-y-auto'>
-										{notifications.map((n) => (
-											<DropdownMenuItem
-												key={n.id}
-												className={`flex items-start gap-3 py-3 px-3 cursor-pointer ${n.unread ? 'bg-accent/30' : ''}`}>
-												<span className='text-lg mt-0.5 shrink-0'>
-													{n.emoji}
-												</span>
-												<div className='flex-1 min-w-0'>
-													<div className='flex items-center justify-between gap-2'>
-														<span className='text-sm font-medium text-foreground truncate'>
-															{n.title}
+										{notifications.length === 0 ? (
+											<div className='py-6 text-center text-sm text-muted-foreground'>
+												No notifications yet
+											</div>
+										) : (
+											notifications.map((n) => (
+												<DropdownMenuItem
+													key={n.id}
+													asChild
+													className={`flex items-start gap-3 py-3 px-3 cursor-pointer ${!n.read ? 'bg-accent/30' : ''}`}>
+													<Link to={n.link ?? '#'}>
+														<span className='text-lg mt-0.5 shrink-0'>
+															{typeEmoji(n.type)}
 														</span>
-														<span className='text-[10px] text-muted-foreground shrink-0'>
-															{n.time}
-														</span>
-													</div>
-													<p className='text-xs text-muted-foreground mt-0.5 truncate'>
-														{n.message}
-													</p>
-												</div>
-												{n.unread && (
-													<div className='w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0' />
-												)}
-											</DropdownMenuItem>
-										))}
+														<div className='flex-1 min-w-0'>
+															<div className='flex items-center justify-between gap-2'>
+																<span className='text-sm font-medium text-foreground truncate'>
+																	{n.title}
+																</span>
+																<span className='text-[10px] text-muted-foreground shrink-0'>
+																	{formatTime(n.created_at)}
+																</span>
+															</div>
+															<p className='text-xs text-muted-foreground mt-0.5 truncate'>
+																{n.message}
+															</p>
+														</div>
+														{!n.read && (
+															<div className='w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0' />
+														)}
+													</Link>
+												</DropdownMenuItem>
+											))
+										)}
 									</div>
-									<DropdownMenuSeparator />
-									<DropdownMenuItem className='justify-center text-sm text-primary font-medium'>
-										View all notifications
-									</DropdownMenuItem>
 								</DropdownMenuContent>
 							</DropdownMenu>
 
@@ -150,9 +170,11 @@ const Navbar = () => {
 									size='icon'
 									className='relative'>
 									<MessageCircle className='h-5 w-5' />
-									<span className='absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground flex items-center justify-center'>
-										2
-									</span>
+									{unreadMessages > 0 && (
+										<span className='absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground flex items-center justify-center'>
+											{unreadMessages > 9 ? '9+' : unreadMessages}
+										</span>
+									)}
 								</Button>
 							</Link>
 
@@ -287,7 +309,13 @@ const Navbar = () => {
 												<Button
 													variant='ghost'
 													className='w-full justify-start gap-2'>
-													<MessageCircle className='h-4 w-4' /> Messages
+													<MessageCircle className='h-4 w-4' />
+													Messages
+													{unreadMessages > 0 && (
+														<span className='ml-auto h-5 min-w-5 px-1 rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground flex items-center justify-center'>
+															{unreadMessages > 9 ? '9+' : unreadMessages}
+														</span>
+													)}
 												</Button>
 											</Link>
 											<Link

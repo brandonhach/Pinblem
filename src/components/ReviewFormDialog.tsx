@@ -11,20 +11,45 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { supabase } from "@/utils/supabaseClient";
+import { useAuth } from "@/contexts/AuthContext";
+
+interface Review {
+  id: string;
+  reviewer_id: string;
+  reviewer_username: string;
+  reviewer_avatar_url: string | null;
+  rating: number;
+  comment: string;
+  created_at: string;
+}
 
 interface ReviewFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  sellerId: string;
   sellerName: string;
+  onReviewSubmitted?: (review: Review) => void;
 }
 
-const ReviewFormDialog = ({ open, onOpenChange, sellerName }: ReviewFormDialogProps) => {
+const ReviewFormDialog = ({
+  open,
+  onOpenChange,
+  sellerId,
+  sellerName,
+  onReviewSubmitted,
+}: ReviewFormDialogProps) => {
+  const { user, profile } = useAuth();
   const [rating, setRating] = useState(0);
   const [hoveredRating, setHoveredRating] = useState(0);
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async () => {
+    if (!user || !profile) {
+      toast.error("You must be logged in to leave a review");
+      return;
+    }
     if (rating === 0) {
       toast.error("Please select a rating");
       return;
@@ -35,9 +60,33 @@ const ReviewFormDialog = ({ open, onOpenChange, sellerName }: ReviewFormDialogPr
     }
 
     setIsSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1200));
+
+    const { data, error } = await supabase
+      .from("reviews")
+      .insert({
+        seller_id: sellerId,
+        reviewer_id: user.id,
+        reviewer_username: profile.username,
+        reviewer_avatar_url: profile.avatar_url ?? null,
+        rating,
+        comment: comment.trim(),
+      })
+      .select()
+      .single();
+
     setIsSubmitting(false);
-    toast.success("Review submitted successfully!");
+
+    if (error) {
+      if (error.code === "23505") {
+        toast.error("You've already reviewed this seller");
+      } else {
+        toast.error("Could not submit review. Please try again.");
+      }
+      return;
+    }
+
+    toast.success("Review submitted!");
+    onReviewSubmitted?.(data as Review);
     setRating(0);
     setComment("");
     onOpenChange(false);

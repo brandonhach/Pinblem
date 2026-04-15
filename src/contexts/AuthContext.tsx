@@ -3,10 +3,10 @@ import { supabase } from '@/utils/supabaseClient';
 import { Session } from '@supabase/supabase-js';
 
 type AuthContextType = {
-	session: Session; 
+	session: Session;
 	user: Session['user'] | null;
 	loading: boolean;
-	profile: { avatar_url: string } | null;
+	profile: { avatar_url: string; username: string } | null;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -43,7 +43,7 @@ export const AuthProvider = ({ children }) => {
 
 				const { data, error } = await supabase
 					.from('users')
-					.select('avatar_url')
+					.select('avatar_url, username')
 					.eq('id', session.user.id)
 					.single();
 				

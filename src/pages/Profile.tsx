@@ -17,7 +17,7 @@ import ListingDrawer from '@/components/ListingDrawer';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent } from '@/components/ui/drawer';
 import { Textarea } from '@/components/ui/textarea';
-import { type Pin, mockReviews } from '@/data/mockData';
+import { type Pin } from '@/data/mockData';
 import ReviewFormDialog from '@/components/ReviewFormDialog';
 import { supabase } from '@/utils/supabaseClient';
 import { Spinner } from '@/components/ui/spinner';
@@ -49,6 +49,16 @@ interface UserProfile {
 	total_sales: number;
 }
 
+interface Review {
+	id: string;
+	reviewer_id: string;
+	reviewer_username: string;
+	reviewer_avatar_url: string | null;
+	rating: number;
+	comment: string;
+	created_at: string;
+}
+
 const Profile = () => {
 	const { id } = useParams();
 	const navigate = useNavigate();
@@ -56,6 +66,7 @@ const Profile = () => {
 
 	const [profile, setProfile] = useState<UserProfile | null>(null);
 	const [sellerPins, setSellerPins] = useState<Pin[]>([]);
+	const [reviews, setReviews] = useState<Review[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
@@ -93,13 +104,21 @@ const Profile = () => {
 
 			setProfile(profileData);
 
-			const { data: pinsData } = await supabase
-				.from('pins')
-				.select(SELECT_FIELDS)
-				.eq('user_id', id)
-				.order('created_at', { ascending: false });
+			const [{ data: pinsData }, { data: reviewsData }] = await Promise.all([
+				supabase
+					.from('pins')
+					.select(SELECT_FIELDS)
+					.eq('user_id', id)
+					.order('created_at', { ascending: false }),
+				supabase
+					.from('reviews')
+					.select('*')
+					.eq('seller_id', id)
+					.order('created_at', { ascending: false }),
+			]);
 
 			setSellerPins((pinsData ?? []).map(mapRow));
+			setReviews(reviewsData ?? []);
 			setLoading(false);
 		};
 
@@ -357,47 +376,61 @@ const Profile = () => {
 				</div>
 			</section>
 
-			{/*  Reviews (mock)  */}
+			{/*  Reviews  */}
 			<section className='px-4 pb-6'>
 				<div className='container max-w-4xl'>
 					<h2 className='font-display text-lg font-semibold text-foreground mb-4'>
 						Recent Reviews
 					</h2>
-					<div className='space-y-3'>
-						{mockReviews.map((review) => (
-							<div
-								key={review.id}
-								className='card-tactile p-4'>
-								<div className='flex items-start gap-3'>
-									<Link
-										to={`/profile/${review.reviewerId}`}
-										className='shrink-0'>
-										<div className='w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-secondary-foreground text-lg'>
-											{review.reviewerAvatar}
+					{reviews.length === 0 ? (
+						<div className='card-tactile p-8 text-center'>
+							<p className='text-muted-foreground'>No reviews yet</p>
+						</div>
+					) : (
+						<div className='space-y-3'>
+							{reviews.map((review) => (
+								<div
+									key={review.id}
+									className='card-tactile p-4'>
+									<div className='flex items-start gap-3'>
+										<Link
+											to={`/profile/${review.reviewer_id}`}
+											className='shrink-0'>
+											{review.reviewer_avatar_url ? (
+												<img
+													src={review.reviewer_avatar_url}
+													alt={review.reviewer_username}
+													className='w-10 h-10 rounded-full object-cover'
+												/>
+											) : (
+												<div className='w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-secondary-foreground font-bold'>
+													{review.reviewer_username?.[0]?.toUpperCase() ?? '?'}
+												</div>
+											)}
+										</Link>
+										<div className='flex-1 min-w-0'>
+											<div className='flex items-center justify-between'>
+												<Link
+													to={`/profile/${review.reviewer_id}`}
+													className='font-medium text-foreground hover:text-primary transition-colors'>
+													{review.reviewer_username}
+												</Link>
+												<span className='text-xs text-muted-foreground'>
+													{new Date(review.created_at).toLocaleDateString()}
+												</span>
+											</div>
+											<div className='flex mt-1'>
+												{renderStars(review.rating)}
+											</div>
+											<p className='text-sm text-muted-foreground mt-2'>
+												{review.comment}
+											</p>
 										</div>
-									</Link>
-									<div className='flex-1 min-w-0'>
-										<div className='flex items-center justify-between'>
-											<Link
-												to={`/profile/${review.reviewerId}`}
-												className='font-medium text-foreground hover:text-primary transition-colors'>
-												{review.reviewer}
-											</Link>
-											<span className='text-xs text-muted-foreground'>
-												{review.date}
-											</span>
-										</div>
-										<div className='flex mt-1'>
-											{renderStars(review.rating)}
-										</div>
-										<p className='text-sm text-muted-foreground mt-2'>
-											{review.comment}
-										</p>
 									</div>
 								</div>
-							</div>
-						))}
-					</div>
+							))}
+						</div>
+					)}
 				</div>
 			</section>
 
@@ -439,7 +472,11 @@ const Profile = () => {
 			<ReviewFormDialog
 				open={isReviewOpen}
 				onOpenChange={setIsReviewOpen}
+				sellerId={profile.id}
 				sellerName={profile.username}
+				onReviewSubmitted={(review) =>
+					setReviews((prev) => [review, ...prev])
+				}
 			/>
 
 			{/*  Message Drawer  */}
