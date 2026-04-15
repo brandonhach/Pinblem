@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/utils/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
+import { useUserOnlineStatus } from '@/hooks/useUserOnlineStatus';
 
 type Participant = {
 	id: string;
@@ -132,6 +133,10 @@ const Messages = () => {
 
 	const activeConvo = conversations.find((c) => c.id === activeConvoId) ?? null;
 
+	const { online: otherUserOnline } = useUserOnlineStatus(
+		activeConvo?.other_user.id,
+	);
+
 	// Fetch conversations (runs once on mount) 
 
 	useEffect(() => {
@@ -220,13 +225,21 @@ const Messages = () => {
 		);
 		if (convoForRead) {
 			const isBuyer = convoForRead.buyer_id === user.id;
+			const now = new Date().toISOString();
+			// Clear the unread message badge
 			supabase
 				.from('conversations')
 				.update({
-					[isBuyer ? 'last_read_buyer_at' : 'last_read_seller_at']:
-						new Date().toISOString(),
+					[isBuyer ? 'last_read_buyer_at' : 'last_read_seller_at']: now,
 				})
 				.eq('id', activeConvoId);
+			// Clear the bell notification for this conversation
+			supabase
+				.from('notifications')
+				.update({ read: true })
+				.eq('user_id', user.id)
+				.eq('read', false)
+				.eq('link', `/messages?convo=${activeConvoId}`);
 		}
 
 		const run = async () => {
@@ -647,13 +660,26 @@ const Messages = () => {
 												{activeConvo.other_user.username}
 											</div>
 											<div className='flex items-center gap-1.5'>
-												<span className='relative flex h-2 w-2'>
-													<span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75' />
-													<span className='relative inline-flex rounded-full h-2 w-2 bg-green-500' />
-												</span>
-												<span className='text-xs text-muted-foreground'>
-													Active
-												</span>
+												{otherUserOnline ? (
+													<>
+														<span className='relative flex h-2 w-2'>
+															<span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75' />
+															<span className='relative inline-flex rounded-full h-2 w-2 bg-green-500' />
+														</span>
+														<span className='text-xs text-muted-foreground'>
+															Online
+														</span>
+													</>
+												) : (
+													<>
+														<span className='relative flex h-2 w-2'>
+															<span className='relative inline-flex rounded-full h-2 w-2 bg-muted-foreground/40' />
+														</span>
+														<span className='text-xs text-muted-foreground'>
+															Offline
+														</span>
+													</>
+												)}
 											</div>
 										</div>
 									</Link>

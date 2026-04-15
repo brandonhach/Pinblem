@@ -26,6 +26,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFavorites } from '@/contexts/FavoritesContext';
+import { useUserOnlineStatus } from '@/hooks/useUserOnlineStatus';
 
 const mapRow = (row): Pin => ({
 	...row,
@@ -45,6 +46,7 @@ const PinDetail = () => {
 	const navigate = useNavigate();
 
 	const [pin, setPin] = useState<Pin | null>(null);
+	const { online: sellerOnline } = useUserOnlineStatus(pin?.user_id);
 	const [similarPins, setSimilarPins] = useState<Pin[]>([]);
 	const [sellerPins, setSellerPins] = useState<Pin[]>([]);
 	const [loading, setLoading] = useState(true);
@@ -590,13 +592,22 @@ const PinDetail = () => {
 										{pin.username}
 									</div>
 									<div className='flex items-center gap-1.5 mt-0.5'>
-										<span className='relative flex h-2.5 w-2.5 shrink-0'>
-											<span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75' />
-											<span className='relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500' />
-										</span>
-										<span className='text-xs text-muted-foreground'>
-											Awaiting to send
-										</span>
+										{sellerOnline ? (
+											<>
+												<span className='relative flex h-2.5 w-2.5 shrink-0'>
+													<span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75' />
+													<span className='relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500' />
+												</span>
+												<span className='text-xs text-muted-foreground'>Online</span>
+											</>
+										) : (
+											<>
+												<span className='relative flex h-2.5 w-2.5 shrink-0'>
+													<span className='relative inline-flex rounded-full h-2.5 w-2.5 bg-muted-foreground/40' />
+												</span>
+												<span className='text-xs text-muted-foreground'>Offline</span>
+											</>
+										)}
 									</div>
 								</div>
 							</div>

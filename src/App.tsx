@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { LocationProvider } from "@/contexts/LocationContext";
 import Index from "./pages/Index";
 import Search from "./pages/Search";
 import Profile from "./pages/Profile";
@@ -29,7 +30,7 @@ const App = () => (
 			<Sonner />
 			<BrowserRouter>
 				<AuthProvider>
-					{' '}
+					<LocationProvider>
 					<FavoritesProvider>
 						<Routes>
 							<Route
@@ -118,6 +119,7 @@ const App = () => (
 							/>
 						</Routes>
 					</FavoritesProvider>
+					</LocationProvider>
 				</AuthProvider>
 			</BrowserRouter>
 		</TooltipProvider>

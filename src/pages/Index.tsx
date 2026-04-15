@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Sparkles } from 'lucide-react';
+import { ArrowRight, MapPin, Sparkles } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import ListingCard from '@/components/ListingCard';
 import ListingDrawer from '@/components/ListingDrawer';
@@ -9,11 +9,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { categories } from '@/data/mockData';
 import { supabase } from '@/utils/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLocation, ALL_LOCATIONS } from '@/contexts/LocationContext';
 import { toast } from 'sonner';
 import type { Pin } from '@/data/mockData';
 
 const Index = () => {
 	const { user } = useAuth();
+	const { location } = useLocation();
 	const [pins, setPins] = useState<Pin[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
 	const [selectedPin, setSelectedPin] = useState<Pin | null>(null);
@@ -23,13 +25,19 @@ const Index = () => {
 		const fetchLatest = async () => {
 			setIsLoading(true);
 			try {
+				let query = supabase
+					.from('pins')
+					.select(`*, users ( username, avatar_url, verified, rating )`)
+					.order('created_at', { ascending: false })
+					.limit(16);
+
+				if (location !== ALL_LOCATIONS) {
+					query = query.eq('location', location);
+				}
+
 				const [{ data: pinsData, error }, { data: favData }] =
 					await Promise.all([
-						supabase
-							.from('pins')
-							.select(`*, users ( username, avatar_url, verified, rating )`)
-							.order('created_at', { ascending: false })
-							.limit(8),
+						query,
 						user
 							? supabase
 									.from('user_favorites')
@@ -61,7 +69,7 @@ const Index = () => {
 		};
 
 		fetchLatest();
-	}, [user]);
+	}, [user, location]);
 
 	const handleCardClick = (pin: Pin) => {
 		setSelectedPin(pin);
@@ -137,9 +145,17 @@ const Index = () => {
 			{/* Latest Listings */}
 			<main className='container px-4 py-8'>
 				<div className='flex items-center justify-between mb-6'>
-					<h2 className='font-display text-xl font-semibold text-foreground'>
-						Latest Listings
-					</h2>
+					<div>
+						<h2 className='font-display text-xl font-semibold text-foreground'>
+							Latest Listings
+						</h2>
+						{location !== ALL_LOCATIONS && (
+							<p className='text-sm text-muted-foreground mt-0.5 flex items-center gap-1'>
+								<MapPin className='h-3 w-3' />
+								{location}
+							</p>
+						)}
+					</div>
 					<Link
 						to='/search'
 						className='text-sm font-medium text-primary hover:text-primary/80 transition-colors flex items-center gap-1'>
@@ -181,10 +197,14 @@ const Index = () => {
 					<div className='text-center py-12'>
 						<div className='text-4xl mb-4'>📌</div>
 						<h3 className='text-lg font-semibold text-foreground'>
-							No listings yet
+							{location !== ALL_LOCATIONS
+								? `No listings in ${location}`
+								: 'No listings yet'}
 						</h3>
 						<p className='text-sm text-muted-foreground mt-1'>
-							Be the first to post a pin!
+							{location !== ALL_LOCATIONS
+								? 'Try selecting a different location.'
+								: 'Be the first to post a pin!'}
 						</p>
 						<Link to='/create'>
 							<Button

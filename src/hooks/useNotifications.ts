@@ -54,6 +54,24 @@ export function useNotifications() {
 					]);
 				},
 			)
+			.on(
+				'postgres_changes',
+				{
+					event: 'UPDATE',
+					schema: 'public',
+					table: 'notifications',
+					filter: `user_id=eq.${user.id}`,
+				},
+				(payload) => {
+					setNotifications((prev) =>
+						prev.map((n) =>
+							n.id === payload.new.id
+								? { ...n, read: payload.new.read }
+								: n,
+						),
+					);
+				},
+			)
 			.subscribe();
 
 		return () => {

@@ -22,23 +22,30 @@ import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
+import { useLocation, ALL_LOCATIONS } from "@/contexts/LocationContext";
+
+const SUGGESTED_LOCATIONS = [
+  "All Locations",
+  "Orlando, FL", "Anaheim, CA", "Los Angeles, CA", "New York, NY",
+  "Houston, TX", "Tampa, FL", "San Francisco, CA", "Chicago, IL",
+  "Miami, FL", "Dallas, TX", "Seattle, WA", "Denver, CO",
+];
 
 const Navbar = () => {
-  const [location, setLocation] = useState("Orlando, FL");
   const [locationSearch, setLocationSearch] = useState("");
   const [showLocationSearch, setShowLocationSearch] = useState(false);
   const { user, profile } = useAuth();
+  const { location, setLocation } = useLocation();
 
   const { notifications, unreadCount, markAllRead } = useNotifications();
   const unreadMessages = useUnreadMessages();
 
-  const suggestedLocations = [
-    "Orlando, FL", "Anaheim, CA", "Los Angeles, CA", "New York, NY",
-    "Houston, TX", "Tampa, FL", "San Francisco, CA", "Chicago, IL",
-    "Miami, FL", "Dallas, TX", "Seattle, WA", "Denver, CO"
-  ];
+  // Merge profile location into suggestions if it's not already there
+  const allSuggestions = profile?.location && !SUGGESTED_LOCATIONS.includes(profile.location)
+    ? [SUGGESTED_LOCATIONS[0], profile.location, ...SUGGESTED_LOCATIONS.slice(1)]
+    : SUGGESTED_LOCATIONS;
 
-  const filteredLocations = suggestedLocations.filter(loc =>
+  const filteredLocations = allSuggestions.filter(loc =>
     loc.toLowerCase().includes(locationSearch.toLowerCase())
   );
 
@@ -181,7 +188,7 @@ const Navbar = () => {
 							{/* Profile */}
 							<DropdownMenu>
 								{/* Location Selector */}
-								<DropdownMenu>
+								<DropdownMenu onOpenChange={(open) => { if (!open) setLocationSearch(''); }}>
 									<DropdownMenuTrigger asChild>
 										<Button
 											variant='ghost'
@@ -192,23 +199,30 @@ const Navbar = () => {
 											</span>
 										</Button>
 									</DropdownMenuTrigger>
-									<DropdownMenuContent align='end'>
-										<DropdownMenuItem
-											onClick={() => setLocation('Orlando, FL')}>
-											Orlando, FL
-										</DropdownMenuItem>
-										<DropdownMenuItem
-											onClick={() => setLocation('Anaheim, CA')}>
-											Anaheim, CA
-										</DropdownMenuItem>
-										<DropdownMenuItem
-											onClick={() => setLocation('Los Angeles, CA')}>
-											Los Angeles, CA
-										</DropdownMenuItem>
-										<DropdownMenuItem
-											onClick={() => setLocation('New York, NY')}>
-											New York, NY
-										</DropdownMenuItem>
+									<DropdownMenuContent align='end' className='w-56 p-2'>
+										<Input
+											placeholder='Search location…'
+											value={locationSearch}
+											onChange={(e) => setLocationSearch(e.target.value)}
+											className='h-8 text-sm mb-1'
+											autoFocus
+										/>
+										<div className='max-h-48 overflow-y-auto space-y-0.5'>
+											{filteredLocations.map((loc) => (
+												<DropdownMenuItem
+													key={loc}
+													className={location === loc ? 'bg-accent' : ''}
+													onClick={() => { setLocation(loc); setLocationSearch(''); }}>
+													{loc}
+												</DropdownMenuItem>
+											))}
+											{filteredLocations.length === 0 && locationSearch && (
+												<DropdownMenuItem
+													onClick={() => { setLocation(locationSearch); setLocationSearch(''); }}>
+													Use "{locationSearch}"
+												</DropdownMenuItem>
+											)}
+										</div>
 									</DropdownMenuContent>
 								</DropdownMenu>
 								<DropdownMenuTrigger asChild>
